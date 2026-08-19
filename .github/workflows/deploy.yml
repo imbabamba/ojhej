@@ -1,0 +1,91 @@
+name: Deploy
+
+# Only main, and only behind the same gate CI runs. A deploy that skips the tests eventually
+# ships a broken verification link, which users experience as "the code never worked" and
+# nobody can reproduce afterwards.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never two deploys at once. The second would race the first's asset upload and could leave
+# the CDN serving a stylesheet from one commit against markup from another.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # The same workflow the PR ran, called rather than copied.
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Assets, script, purge
+    needs: verify
+    runs-on: ubuntu-latest
+    # Put required reviewers or a wait timer on this environment in repo settings if you ever
+    # want a human between a merge and production.
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.9.5"
+
+      # Assets first, deliberately. Uploading is additive: the currently deployed script does
+      # not reference the new files, so nothing breaks in the window between these two steps.
+      # The other order puts a script live that asks for fonts nobody has uploaded yet.
+      #
+      # Since the asset URLs carry a hash of their contents, the wrong order is now worse than
+      # a gap: a script live with the new stamp makes browsers pin the OLD file under the NEW
+      # URL, for the nine months the pull zone tells them to. `scripts/smoke.ts` checks the
+      # stamp against the served bytes, so a deploy that gets this wrong fails the gate.
+      - name: Upload static assets to the Storage Zone
+        env:
+          BUNNY_STORAGE_ZONE: ${{ secrets.BUNNY_STORAGE_ZONE }}
+          BUNNY_STORAGE_KEY: ${{ secrets.BUNNY_STORAGE_KEY }}
+          BUNNY_STORAGE_HOST: ${{ vars.BUNNY_STORAGE_HOST }}
+        run: deno task upload-assets
+
+      # The deploy action takes one file, and the edge script imports half of src/. Bundling
+      # is what Bunny's own templates do; this produces a single self-contained module with
+      # the Deno globals left alone.
+      - name: Bundle the edge script
+        run: |
+          deno task bundle
+          ls -la dist/edge.js
+
+      - name: Deploy to Edge Scripting
+        uses: BunnyWay/actions/deploy-script@main
+        with:
+          script_id: ${{ secrets.BUNNY_SCRIPT_ID }}
+          deploy_key: ${{ secrets.BUNNY_DEPLOY_KEY }}
+          file: dist/edge.js
+
+      # Verifying against a cached response is verifying a lie, and the CDN is this project's
+      # stale-cache trap. Purge before the smoke test, never after.
+      - name: Purge the Pull Zone cache
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          PULLZONE_ID: ${{ vars.BUNNY_PULLZONE_ID }}
+        run: |
+          set -euo pipefail
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            "https://api.bunny.net/pullzone/${PULLZONE_ID}/purgeCache" \
+            -H "AccessKey: ${BUNNY_API_KEY}" -H "content-length: 0")
+          echo "purge returned ${status}"
+          case "$status" in 200|204) ;; *) exit 1 ;; esac
+
+      # A deploy is not finished because it uploaded. It is finished when the thing answers.
+      # Every check in here has failed for real at some point in this project's life.
+      #
+      # A script rather than a chain of `grep -q`, because that version reported a red X and no
+      # information, and stopped at the first failure so you could not tell whether one thing
+      # was wrong or five. This one runs everything and says what it got.
+      - name: Smoke test
+        env:
+          OJHEJ_BASE_URL: ${{ vars.OJHEJ_BASE_URL }}
+        run: deno task smoke

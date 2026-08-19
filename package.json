@@ -1,0 +1,31 @@
+{
+  "name": "project-ojhej",
+  "version": "1.0.0",
+  "description": "dejta grej",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imbabamba/project-ojhej.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/imbabamba/project-ojhej/issues"
+  },
+  "homepage": "https://github.com/imbabamba/project-ojhej#readme",
+  "devDependencies": {
+    "deno": "2.9.5",
+    "jsqr": "^1.4.0",
+    "pngjs": "^5.0.0"
+  },
+  "dependencies": {
+    "altcha-lib": "^1.4.1",
+    "qrcode": "^1.5.4",
+    "@bunny.net/edgescript-sdk": "0.12.1"
+  }
+}

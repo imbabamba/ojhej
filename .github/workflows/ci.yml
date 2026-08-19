@@ -1,0 +1,63 @@
+name: CI
+
+# Every push, every pull request, and once more from the deploy workflow, which calls this
+# rather than restating it. A second copy of the gate is how a project ends up deploying past
+# a check that only the PR path runs.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: fmt, lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          # Pinned exactly, not a range. Bunny runs Deno 1.x and this repo is written to stay
+          # inside that intersection; a toolchain that drifts starts accepting syntax that
+          # production cannot run, and nothing here would catch it.
+          deno-version: "2.9.5"
+
+      - name: Verify
+        run: deno task verify
+
+      # The flow scripts drive the real server end to end, which catches what unit tests
+      # cannot: routing, prefetch safety, the whole change-of-address sequence. Mail is
+      # captured to disk, so no account and no secrets are involved.
+      #
+      # Started and stopped inside one step on purpose. A background process left running
+      # between steps is not something GitHub guarantees, and a flaky CI step teaches people
+      # to rerun rather than to read.
+      - name: End-to-end flows
+        run: |
+          set -euo pipefail
+          deno task dev > devserver.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:8787/health && break
+            sleep 1
+            if [ "$i" = 30 ]; then echo "server never came up"; cat devserver.log; exit 1; fi
+          done
+
+          deno task flow
+          deno task change-flow
+
+      # Every file is decoded before it is written, so this failing means the renderer is
+      # producing artwork a scanner cannot read.
+      - name: Print pack decodes
+        run: deno task print-pack K7M4NPQR8TVWXYZ2ABCD --ut ./tryck-ci
+
+      - name: Server log
+        if: failure()
+        run: cat devserver.log || true

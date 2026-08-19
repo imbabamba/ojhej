@@ -1,0 +1,16 @@
+# Line endings, settled once.
+#
+# git is configured with core.autocrlf=true on at least one machine here, which stores LF and
+# checks out CRLF on Windows. `deno fmt` wants LF and reports every file as unformatted when it
+# meets CRLF, so `deno task verify` fails locally on Windows and passes in CI on Linux, which is
+# the worst way for a check to be wrong: it looks like the Windows machine is broken.
+#
+# Forcing LF in the working tree on every platform makes the formatter, the repository and CI
+# agree. Editors have handled LF on Windows for a decade.
+* text=auto eol=lf
+
+# Binary, so git never touches their bytes looking for line endings.
+*.png binary
+*.woff2 binary
+*.pdf binary
+*.ico binary
