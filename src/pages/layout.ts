@@ -95,6 +95,40 @@ export function setContactCode(slug: string | null): void {
 }
 
 /**
+ * The GitHub mark, inline.
+ *
+ * Inline rather than an `<img>` or a CDN link for the reason the fonts are self-hosted: a
+ * third-party request on page load hands that party the visitor's IP and the page they were on,
+ * which would break the promise this link exists to evidence. It is 700 bytes and it never
+ * changes, so it costs one gzip dictionary entry and no request.
+ *
+ * GitHub's own mark, used to point at GitHub, which is what their brand guidance permits.
+ */
+const GITHUB_MARK =
+  `<svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>`;
+
+/** Where the source lives. A constant so the one URL is written once. */
+const SOURCE_URL = "https://github.com/imbabamba/ojhej";
+
+/**
+ * A link to the source, on every page including the ones a stranger reaches by scanning.
+ *
+ * The footer navigation is owner-only, deliberately, because a stranger mid-message is not
+ * managing a code. This is not navigation: it is the evidence for a claim the scan page makes to
+ * that exact reader, that we store neither their message nor their details. Somebody being asked
+ * to trust that is the person most entitled to check it.
+ *
+ * Opens in a new tab, which is the one place on this site that is worth doing. The scan page
+ * carries a half-written message to a stranger, and a footer link that navigated away would
+ * throw it out.
+ */
+function sourceLink(): string {
+  return `<a class="site-foot-src" href="${SOURCE_URL}" target="_blank" rel="noopener">
+${GITHUB_MARK}<span>GitHub</span>
+</a>`;
+}
+
+/**
  * The footer, on every page.
  *
  * The mark, the name, and one line saying what this is for.
@@ -113,6 +147,7 @@ export function siteFooter(here: NavHere, slugHere: string | null = null): strin
 <a class="site-foot-brand" href="/">${MARK}<span class="site-foot-name">ojhej.se</span></a>
 <p class="site-foot-line">Ett annat sätt att få kontakt.</p>
 ${contactQr(slugHere)}
+${sourceLink()}
 ${siteNav(here)}
 </div>`;
 }

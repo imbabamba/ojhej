@@ -898,6 +898,35 @@ a:hover {
   text-decoration: underline;
 }
 
+/*
+ * The source link.
+ *
+ * Sized and coloured like the brand line above it rather than like a button: it is provenance,
+ * not a call to action, and the page already has one of those. The mark takes the faint ink so a
+ * borrowed logo does not out-shout the site's own.
+ */
+.site-foot-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  text-decoration: none;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.site-foot-src:hover {
+  color: var(--ink);
+}
+
+.gh-mark {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  fill: currentColor;
+}
+
 .site-foot-qr-meta {
   color: var(--ink-faint);
   font-size: 0.75rem;

@@ -37,13 +37,42 @@ function everyPage(): Promise<{ name: string; html: string }[]> {
  *
  * This is written as an origin sweep rather than a check for the specific hosts that used to be
  * here, because the next regression will be some other CDN nobody thought to look for.
+ *
+ * What counts is what the browser *fetches*: `src`, and `href` on a `<link>`, which between them
+ * cover scripts, images, stylesheets, fonts and preloads. Those happen on load, without the
+ * reader choosing, and each one hands a third party their IP and the page they were on.
+ *
+ * A plain `<a href>` is not that. It fetches nothing until somebody decides to click, and this
+ * site sends `referrer-policy: no-referrer`, so even the click carries no page. The footer's
+ * source link is one, and the fence below is what keeps that the only kind of exception.
  */
-Deno.test("no page reaches out to a third party", async () => {
+Deno.test("no page loads anything from a third party", async () => {
   for (const { name, html } of await everyPage()) {
-    const external = [...html.matchAll(/(?:href|src)="(https?:)?\/\/([^"/]+)/g)]
-      .map((match) => match[2]);
+    const loaded = [
+      ...html.matchAll(/src="(?:https?:)?\/\/([^"/]+)/g),
+      ...html.matchAll(/<link[^>]*?href="(?:https?:)?\/\/([^"/]+)/g),
+    ].map((match) => match[1]);
 
-    assertEquals(external, [], `${name} loads from ${external.join(", ")}`);
+    assertEquals(loaded, [], `${name} loads from ${loaded.join(", ")}`);
+  }
+});
+
+/**
+ * The fence around that loosening.
+ *
+ * The sweep above no longer fails on any cross-origin `href`, which is a real weakening of a test
+ * written to keep a privacy promise. So this pins the remaining surface: every cross-origin
+ * reference on every page is a link a reader chooses to follow, to exactly one host, and never
+ * something the browser fetches on its own.
+ */
+Deno.test("the only thing pointing off-site is a link the reader chooses", async () => {
+  for (const { name, html } of await everyPage()) {
+    const offSite = [...html.matchAll(/<(\w+)[^>]*?(?:href|src)="(?:https?:)?\/\/([^"/]+)/g)];
+
+    for (const [, tag, host] of offSite) {
+      assertEquals(tag, "a", `${name} points off-site from a <${tag}>, which loads on its own`);
+      assertEquals(host, "github.com", `${name} points at ${host}`);
+    }
   }
 });
 
@@ -471,4 +500,64 @@ Deno.test("the landing page offers the way back in without scrolling to the foot
     !beforeFooter.includes('<a class="btn" href="/hantera"'),
     "the way back in must not be a second call to action",
   );
+});
+
+/**
+ * The source link is provenance, not navigation, so it does not follow the owner-only rule.
+ *
+ * The scan page tells a stranger we store neither their message nor their details. That reader is
+ * being asked to trust a claim, which makes them the person most entitled to check it, so the
+ * link to the source belongs on their page too. The nav above it stays owner-only.
+ */
+Deno.test("every page links to the source, including the ones a stranger scans", async () => {
+  const pages: [string, Response][] = [
+    ["landing", renderLanding()],
+    ["skapa", renderSkapa()],
+    ["hantera-locked", renderHanteraLocked()],
+    ["sent", renderSent()],
+    ["scan-unknown", renderUnknown()],
+    [
+      "scan",
+      renderActive({
+        slug: "K7M4NPQR8TVWXYZ2ABCD",
+        emailEnc: "x",
+        status: "active",
+        createdAt: 0,
+        verifiedAt: 0,
+        msgCount: 0,
+        msgToday: 0,
+        msgDay: 0,
+      }),
+    ],
+  ];
+
+  for (const [name, response] of pages) {
+    const html = await response.text();
+    assertStringIncludes(html, 'href="https://github.com/imbabamba/ojhej"', name);
+    assertStringIncludes(html, "Källkoden på GitHub", name);
+    // Inline, so it costs no request and cannot hand a third party the visitor's IP.
+    assertStringIncludes(html, '<svg class="gh-mark"', name);
+  }
+});
+
+/**
+ * A stranger on the scan page is part-way through writing to somebody. A footer link that
+ * navigated the tab away would throw that message out, which is why this one alone opens a tab.
+ */
+Deno.test("the source link opens away from a half-written message", async () => {
+  const html = await renderActive({
+    slug: "K7M4NPQR8TVWXYZ2ABCD",
+    emailEnc: "x",
+    status: "active",
+    createdAt: 0,
+    verifiedAt: 0,
+    msgCount: 0,
+    msgToday: 0,
+    msgDay: 0,
+  }).text();
+
+  const link = html.slice(html.indexOf("site-foot-src"));
+  const tag = link.slice(0, link.indexOf(">"));
+  assertStringIncludes(tag, 'target="_blank"');
+  assertStringIncludes(tag, "noopener", "a new tab must not get a handle on this one");
 });
