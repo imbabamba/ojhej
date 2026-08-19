@@ -534,9 +534,16 @@ Deno.test("every page links to the source, including the ones a stranger scans",
   for (const [name, response] of pages) {
     const html = await response.text();
     assertStringIncludes(html, 'href="https://github.com/imbabamba/ojhej"', name);
-    assertStringIncludes(html, "Källkoden på GitHub", name);
     // Inline, so it costs no request and cannot hand a third party the visitor's IP.
     assertStringIncludes(html, '<svg class="gh-mark"', name);
+
+    // Labelled, but the wording is not pinned. This asserted the exact sentence once and broke
+    // the build the first time the label was shortened, which is a test failing on a change it
+    // was never there to protect. What matters is that the link says where it goes rather than
+    // being a bare mark somebody has to guess at.
+    const link = html.slice(html.indexOf("site-foot-src"));
+    const text = link.slice(0, link.indexOf("</a>")).replace(/<[^>]*>/g, "").trim();
+    assertStringIncludes(text, "GitHub", `${name} links to the source without saying so`);
   }
 });
 
