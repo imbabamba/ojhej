@@ -46,7 +46,7 @@ import {
   deleteCode,
   getCode,
   readOwnerEmail,
-  setDesign,
+  setCodeSetup,
   setStatus,
   setStatusOn,
 } from "../store/shirts.ts";
@@ -60,6 +60,7 @@ import {
 } from "../store/tokens.ts";
 import { encrypt, isValidSlug } from "../store/crypto.ts";
 import { cleanDesign, type Design, syfteOf, visningsnamn } from "../syfte.ts";
+import { cleanSurveySetup, type SurveySetup } from "../survey.ts";
 import { error, info } from "../log.ts";
 import { type AppContext, json, methodNotAllowed, refuse } from "./context.ts";
 
@@ -262,9 +263,14 @@ export async function handleManageAction(ctx: AppContext, request: Request): Pro
   }
 
   let design: Design | null = null;
+  let survey: SurveySetup | null = null;
   if (atgard === "syfte") {
     design = cleanDesign({ syfte: body.syfte, rad: body.rad, etikett: body.etikett });
     if (!design) return json({ fel: "Det där syftet känner vi inte igen." }, 400);
+    survey = cleanSurveySetup({ mode: body.mode, questions: body.questions });
+    if (!survey) {
+      return json({ fel: "En enkät behöver 2–5 korta frågor." }, 400);
+    }
   }
 
   // Peek first. The membership check below decides whether this request is allowed at all, and a
@@ -415,14 +421,14 @@ export async function handleManageAction(ctx: AppContext, request: Request): Pro
     return json({ ok: true, next: `/klar?t=${token}` });
   }
 
-  if (atgard === "syfte" && design) {
+  if (atgard === "syfte" && design && survey) {
     try {
-      await setDesign(ctx.store, slug, design, now);
+      await setCodeSetup(ctx.store, slug, design, survey, now);
     } catch {
       // Deleted between the check and here. Nothing was written.
       return noSuchCode();
     }
-    info("code purpose set", { syfte: design.syfte });
+    info("code setup saved", { syfte: design.syfte, mode: survey.mode });
     // A code-scoped link back, because the page this answers is one code's own page.
     const { token } = await mintToken(ctx.store, slug, "manage", now);
     return json({ ok: true, t: token });

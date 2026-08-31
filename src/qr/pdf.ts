@@ -170,8 +170,8 @@ function contentStream(layout: QrLayout): string {
           shape.w * unit,
           shape.h * unit,
         );
-        // Only the panel carries its own fill. Set it, paint, and set the ink back, so a
-        // later shape cannot inherit white and vanish.
+        // The dark background carries its own fill. Set it, paint, and restore the white ink
+        // before the modules that follow.
         if (shape.fill) {
           const [pr, pg, pb] = hexToRgb(shape.fill);
           ops.push(`${n(pr)} ${n(pg)} ${n(pb)} rg`, `${path} f`, `${n(r)} ${n(g)} ${n(b)} rg`);
@@ -197,7 +197,7 @@ function contentStream(layout: QrLayout): string {
         const width = textWidth(shape.value, size, spacing);
         // PDF has no centred text, so the run is measured and placed from its left edge.
         const x = shape.cx * unit - width / 2;
-        // A panelled label is painted light, because it sits on the garment, not the panel.
+        // A dark-garment label is explicitly white.
         if (shape.fill) {
           const [tr, tg, tb] = hexToRgb(shape.fill);
           ops.push(`${n(tr)} ${n(tg)} ${n(tb)} rg`);
@@ -235,12 +235,10 @@ export function serialisePdf(layout: QrLayout): Uint8Array {
 
   const stream = contentStream(layout);
 
-  // A panelled file is white panel, white text, dark code. Opened in a viewer against a white
-  // page the white parts are invisible and the file looks like the text went missing. It has
-  // not; it is for a dark garment. The document title is what a print shop's viewer shows, so
-  // that is where it says so. ASCII only, because this string is WinAnsi like any other.
+  // State the polarity in the metadata too, so a print shop cannot confuse the two files.
+  // ASCII only, because this string is WinAnsi like any other.
   const title = layout.applied.panel
-    ? "ojhej.se SVART BAKGRUND - vit platta och vit text, svart kod"
+    ? "ojhej.se SVART BAKGRUND - vit kod och vit text"
     : "ojhej.se VIT BAKGRUND - svart kod, genomskinlig bakgrund";
 
   const objects = [

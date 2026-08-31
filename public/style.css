@@ -360,6 +360,191 @@ a:hover {
   color: var(--accent-ink);
 }
 
+/* ---------- primary choices ---------- */
+
+.choice-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.choice-cards,
+.mode-cards {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.choice-card,
+.mode-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.choice-card:hover,
+.mode-card:hover {
+  border-color: var(--accent);
+}
+
+.choice-card:has(input:checked),
+.mode-card[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--paper-sunk);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.choice-card input {
+  flex: none;
+  margin: 0.25rem 0 0;
+  accent-color: var(--accent);
+}
+
+/* A choice card is a label inside `.field`; undo the compact all-caps field-label treatment. */
+.field .choice-card {
+  display: flex;
+  margin-bottom: 0;
+  color: var(--ink);
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.choice-card span,
+.mode-card span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.choice-card strong,
+.mode-card strong {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.choice-card small,
+.mode-card span {
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.mode-card {
+  display: grid;
+  gap: 0.2rem;
+}
+
+/* ---------- survey builder and answers ---------- */
+
+.survey-builder {
+  padding: 1.25rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-sunk);
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.section-head .legend,
+.section-head .hint {
+  margin-top: 0;
+}
+
+.questions {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.question-row label {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--ink-faint);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.question-control {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.question-control .input {
+  flex: 1;
+}
+
+.remove-question {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.75rem 0;
+  cursor: pointer;
+}
+
+.remove-question:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.remove-question:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.survey-builder > .aside {
+  margin-top: 1rem;
+}
+
+.survey-progress {
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.survey-progress .aside {
+  margin-top: 0.35rem;
+}
+
+.survey-answer .survey-question {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.survey-question span {
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
 /* ---------- what the scanner will read ---------- */
 
 /* Dashed rather than solid: this is a preview of another page, not a control on this one. */
@@ -630,16 +815,27 @@ a:hover {
   border: 1px solid var(--rule-strong);
 }
 
-/*
- * Stand-in for a dark garment.
- *
- * The panel is white and the frame is white, so a panelled code looks identical to an
- * unpanelled one against the site's own paper. Darkening the frame is what makes the choice
- * legible: you can see the white rectangle the code will be printed on.
- */
+/* Stand-in for the garment colour selected in the designer. */
 .qr-frame.on-dark {
   background: #171512;
   border-color: #171512;
+}
+
+.qr-frame {
+  position: relative;
+}
+
+.qr-frame.is-updating::after {
+  content: "Uppdaterar …";
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.65rem;
+  padding: 0.25rem 0.45rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #12100e;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .qr-frame img,
@@ -1077,4 +1273,187 @@ a:hover {
 
 .fold-body {
   padding-bottom: 1.5rem;
+}
+
+/* ---------- responsive landing ---------- */
+
+.landing-wrap {
+  width: 100%;
+  max-width: 30rem;
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+.landing-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.landing-how {
+  display: none;
+}
+
+.landing-privacy {
+  border: 0;
+  padding-top: 1rem;
+}
+
+.landing-footer {
+  border: 0;
+  padding-top: 0;
+}
+
+@media (min-width: 56rem) {
+  .landing-wrap {
+    max-width: 76rem;
+  }
+
+  .landing-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(20rem, 0.75fr);
+    align-items: center;
+    gap: clamp(5rem, 10vw, 10rem);
+    padding-top: 5rem;
+    padding-bottom: 4rem;
+  }
+
+  .landing-hero {
+    max-width: 40rem;
+  }
+
+  .landing .statement {
+    font-size: clamp(7rem, 11vw, 11rem);
+  }
+
+  .landing-hero .btn {
+    width: auto;
+    min-width: 18rem;
+  }
+
+  .landing-how {
+    display: block;
+    padding-left: clamp(2rem, 4vw, 4rem);
+    border-left: 1px solid var(--rule-strong);
+  }
+
+  .landing-steps {
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0 0;
+  }
+
+  .landing-steps li {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 1rem;
+    padding: 1.35rem 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .landing-steps li:last-child {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .landing-steps > li > span {
+    color: var(--accent);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+  }
+
+  .landing-steps strong {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 400;
+    line-height: 1.15;
+  }
+
+  .landing-steps p {
+    margin: 0.4rem 0 0;
+    color: var(--ink-faint);
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .landing-mobile-how {
+    display: none;
+  }
+
+  .landing-bottom {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.75fr);
+    gap: clamp(5rem, 10vw, 10rem);
+    align-items: start;
+  }
+
+  .landing-privacy,
+  .landing-footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+  }
+
+  .screen--folio .folio {
+    max-width: 76rem;
+  }
+
+  .mode-cards,
+  .choice-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .setup-wrap {
+    max-width: 74rem;
+  }
+
+  .setup-wrap > .stack:not(.setup-grid) {
+    max-width: 30rem;
+  }
+
+  .setup-grid {
+    display: grid;
+    grid-template-columns: minmax(18rem, 0.75fr) minmax(26rem, 1.25fr);
+    grid-template-areas:
+      "intro intro"
+      "address address"
+      "preview editor"
+      "downloads downloads"
+      "notice notice";
+    gap: 3rem clamp(4rem, 8vw, 8rem);
+    align-items: start;
+  }
+
+  .setup-grid > * + * {
+    margin-top: 0;
+  }
+
+  .setup-intro {
+    grid-area: intro;
+    max-width: 38rem;
+  }
+
+  .setup-address {
+    grid-area: address;
+  }
+
+  .setup-preview {
+    grid-area: preview;
+    position: sticky;
+    top: 2rem;
+  }
+
+  .setup-editor {
+    grid-area: editor;
+  }
+
+  .setup-downloads {
+    grid-area: downloads;
+    max-width: 44rem;
+  }
+
+  .setup-notice {
+    grid-area: notice;
+  }
 }

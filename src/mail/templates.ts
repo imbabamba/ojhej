@@ -25,10 +25,8 @@ export interface RenderedMail {
 
 export type ContactChannel = "mail" | "instagram" | "telefon";
 
-export interface MessageMailData {
+interface MessageMailBase {
   namn: string;
-  var: string;
-  meddelande: string;
   kanal: ContactChannel;
   kontakt: string;
   antalIdag: number;
@@ -36,6 +34,13 @@ export interface MessageMailData {
   slugKort: string;
   hanteraUrl: string;
 }
+
+export type MessageMailData =
+  & MessageMailBase
+  & (
+    | { var: string; meddelande: string; answers?: never }
+    | { answers: { question: string; answer: string }[]; var?: never; meddelande?: never }
+  );
 
 /**
  * R14. Derived from the configured base URL rather than hardcoded, so a preview deploy does not
@@ -178,6 +183,7 @@ function field(label: string, value: string, serif = false): string {
 export function renderMessageMail(data: MessageMailData): RenderedMail {
   const href = contactHref(data.kanal, data.kontakt);
   const kanalNamn = { mail: "mail", instagram: "Instagram", telefon: "telefon" }[data.kanal];
+  const survey = "answers" in data && Array.isArray(data.answers);
 
   const contactHtml = href
     ? `<a href="${escapeHtml(href)}" class="ink" style="color:${INK};text-decoration:underline">${
@@ -185,12 +191,17 @@ export function renderMessageMail(data: MessageMailData): RenderedMail {
     }</a>`
     : escapeHtml(data.kontakt);
 
-  const inner = heading("Oj hej.", "Någon skannade din kod och skrev några rader.") +
+  const responseFields = survey
+    ? (data.answers ?? []).map((answer) => field(answer.question, answer.answer, true)).join("")
+    : field("Såg dig", data.var ?? "") + field("Meddelande", data.meddelande ?? "", true);
+  const lede = survey
+    ? "Någon skannade din kod och svarade på dina frågor."
+    : "Någon skannade din kod och skrev några rader.";
+
+  const inner = heading("Oj hej.", lede) +
     `<tr><td class="pad" style="padding:0 40px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="background:${SUNK};border:1px solid ${RULE}">
-${field("Från", data.namn)}${field("Såg dig", data.var)}${
-      field("Meddelande", data.meddelande, true)
-    }</table></td></tr>` +
+${field("Från", data.namn)}${responseFields}</table></td></tr>` +
     `<tr><td class="pad" style="padding:32px 40px 0">
 <p class="faint" style="margin:0 0 6px;font-family:${SANS};font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:${FAINT}">Vill nås via ${
       escapeHtml(kanalNamn)
@@ -199,26 +210,33 @@ ${field("Från", data.namn)}${field("Såg dig", data.var)}${
     `<tr><td class="pad" style="padding:24px 40px 0">
 <p class="soft" style="margin:0;font-family:${SERIF};font-style:italic;font-size:17px;line-height:1.4;color:${SOFT}">Du bestämmer om du svarar. Gör du inget händer ingenting.</p></td></tr>` +
     footer(
-      `<p class="faint" style="margin:0 0 8px;font-family:${SANS};font-size:13px;line-height:1.5;color:${FAINT}">Det här är meddelande ${data.antalIdag} av ${data.maxPerDag} idag på ${
+      `<p class="faint" style="margin:0 0 8px;font-family:${SANS};font-size:13px;line-height:1.5;color:${FAINT}">Det här är ${
+        survey ? "svar" : "meddelande"
+      } ${data.antalIdag} av ${data.maxPerDag} idag på ${
         escapeHtml(data.slugKort)
-      }. Vi sparar varken meddelandet eller avsändarens uppgifter.</p>
+      }. Vi sparar varken ${survey ? "svaren" : "meddelandet"} eller avsändarens uppgifter.</p>
 <p style="margin:0;font-family:${SANS};font-size:13px"><a href="${
         escapeHtml(data.hanteraUrl)
       }" class="faint" style="color:${FAINT};text-decoration:underline">Pausa eller radera din kod</a></p>`,
     );
 
+  const answerText = survey
+    ? (data.answers ?? []).map((answer) => `${answer.question}\n${answer.answer}`)
+      .join("\n\n")
+    : `SÅG DIG
+${data.var}
+
+MEDDELANDE
+${data.meddelande}`;
+
   const text = `Oj hej.
 
-Någon skannade din kod och skrev några rader.
+${lede}
 
 FRÅN
 ${data.namn}
 
-SÅG DIG
-${data.var}
-
-MEDDELANDE
-${data.meddelande}
+${answerText}
 
 VILL NÅS VIA ${kanalNamn.toUpperCase()}
 ${data.kontakt}
@@ -226,22 +244,27 @@ ${data.kontakt}
 Du bestämmer om du svarar. Gör du inget händer ingenting.
 
 --
-Det här är meddelande ${data.antalIdag} av ${data.maxPerDag} idag på ${data.slugKort}.
-Vi sparar varken meddelandet eller avsändarens uppgifter.
+Det här är ${
+    survey ? "svar" : "meddelande"
+  } ${data.antalIdag} av ${data.maxPerDag} idag på ${data.slugKort}.
+Vi sparar varken ${survey ? "svaren" : "meddelandet"} eller avsändarens uppgifter.
 
 Pausa eller radera din kod: ${data.hanteraUrl}
 `;
 
   return {
     // Static on purpose. Visitor text in a subject line buys nothing and risks a header.
-    subject: "Någon skannade din kod",
+    subject: survey ? "Någon svarade på dina frågor" : "Någon skannade din kod",
     text,
-    html: shell(inner, `${data.namn} såg dig ${data.var} och skrev några rader.`),
+    html: shell(
+      inner,
+      survey ? `${data.namn} svarade på dina frågor.` : `${data.namn} såg dig ${data.var}.`,
+    ),
   };
 }
 
 export function renderVerifyMail(data: { verifieraUrl: string }): RenderedMail {
-  const inner = heading("Nästan igång.", "Ett klick så kan din kod ta emot meddelanden.") +
+  const inner = heading("Nästan igång.", "Ett klick så kan din kod ta emot svar.") +
     button(data.verifieraUrl, "Aktivera koden") +
     fallbackLink(data.verifieraUrl) +
     footer(
@@ -253,7 +276,7 @@ export function renderVerifyMail(data: { verifieraUrl: string }): RenderedMail {
     subject: "Aktivera din kod",
     text: `Nästan igång.
 
-Ett klick så kan din kod ta emot meddelanden:
+Ett klick så kan din kod ta emot svar:
 
 ${data.verifieraUrl}
 
@@ -406,7 +429,7 @@ export function renderEmailChangeNoticeMail(
   const inner = heading(rubrik, "En begäran om att byta adress har kommit in.") +
     field("Ny adress", data.nyAdress) +
     footer(
-      `<p class="faint" style="margin:0;font-family:${SANS};font-size:13px;line-height:1.5;color:${FAINT}">Ingenting har hänt än. Bytet sker först när den nya adressen bekräftas, och då slutar den här adressen ta emot meddelanden. Var det inte du: begär en hantera-länk och ${rad}, så blir begäran värdelös.</p>`,
+      `<p class="faint" style="margin:0;font-family:${SANS};font-size:13px;line-height:1.5;color:${FAINT}">Ingenting har hänt än. Bytet sker först när den nya adressen bekräftas, och då slutar den här adressen ta emot svar. Var det inte du: begär en hantera-länk och ${rad}, så blir begäran värdelös.</p>`,
     );
 
   return {
@@ -419,7 +442,7 @@ Ny adress: ${data.nyAdress}
 
 --
 Ingenting har hänt än. Bytet sker först när den nya adressen bekräftas,
-och då slutar den här adressen ta emot meddelanden.
+och då slutar den här adressen ta emot svar.
 Var det inte du: begär en hantera-länk och ${rad}, så blir
 begäran värdelös.
 `,

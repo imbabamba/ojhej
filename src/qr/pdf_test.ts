@@ -177,15 +177,14 @@ Deno.test("every shape is a plain rectangle, so the file has no curves at all", 
   assertStringIncludes(stream, " re f");
 });
 
-/** The panel must paint light and then put the ink back, or everything after it vanishes. */
-Deno.test("a panel is painted white and does not leak its colour onto the code", () => {
+/** The black background must restore white before painting the modules that follow it. */
+Deno.test("a dark-garment PDF paints a black field and a white code", () => {
   const body = text(renderPdf(URL_, { sizeMm: BACK, panel: true }).pdf);
   const stream = body.slice(body.indexOf("stream"), body.indexOf("endstream"));
 
-  assertStringIncludes(stream, "1 1 1 rg", "the panel is white");
-  // After painting it, the ink is restored, so the modules that follow are dark.
-  const whiteAt = stream.indexOf("1 1 1 rg");
-  assertStringIncludes(stream.slice(whiteAt), "0 0 0 rg");
+  assertStringIncludes(stream, "0 0 0 rg", "the background is black");
+  const blackAt = stream.indexOf("0 0 0 rg");
+  assertStringIncludes(stream.slice(blackAt), "1 1 1 rg", "the modules after it are white");
 });
 
 /** An empty layout must still be a valid file rather than a zero-object document. */
@@ -198,11 +197,10 @@ Deno.test("serialising is stable and self-consistent for any layout", () => {
 });
 
 /**
- * The panel shifts the code inward by two modules on every side. If the decoder still reads it,
- * the offsets survived; if it does not, a dark-garment print would be a code that scans nowhere
- * and nobody would notice until the shirts arrived.
+ * The dark background shifts the code inward by two modules on every side. The decoder receives
+ * the actual black-field/white-module polarity, so this checks inversion as well as geometry.
  */
-Deno.test("a panelled code still decodes, at both sizes", () => {
+Deno.test("a white code on black still decodes, at both sizes", () => {
   for (const sizeMm of [CHEST, BACK]) {
     const layout = layoutQr(URL_, { sizeMm, panel: true });
     assertEquals(decodeLayout(layout), URL_, `${sizeMm}mm with a panel`);
@@ -225,10 +223,8 @@ Deno.test("a panel does not eat the quiet zone", () => {
 });
 
 /**
- * A panelled file is white panel, white text, dark code. Opened in a viewer against a white
- * page the white parts are invisible and the file looks like the text went missing. It has not;
- * it is for a dark garment. The document title is what a print shop's viewer shows, so that is
- * where it says so.
+ * The document title repeats the polarity, so the target garment is clear even outside the
+ * artwork preview.
  */
 Deno.test("the document title says which background the file is for", () => {
   const panelled = text(renderPdf(URL_, { sizeMm: BACK, panel: true, label: "DEJTA" }).pdf);
@@ -236,7 +232,7 @@ Deno.test("the document title says which background the file is for", () => {
 
   assertStringIncludes(panelled, "/Title (");
   assertStringIncludes(panelled, "SVART BAKGRUND");
-  assertStringIncludes(panelled, "vit platta");
+  assertStringIncludes(panelled, "vit kod");
   assertStringIncludes(plain, "VIT BAKGRUND");
 });
 

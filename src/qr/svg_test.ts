@@ -115,34 +115,20 @@ Deno.test("the code is drawn in plain squares, always", () => {
   }
 });
 
-/**
- * The answer for a dark garment, and not the obvious one. White ink is the obvious one and it
- * is read by only 80 to 90 percent of scanners; a dark code on a light panel is read by
- * everything. See specs/ojhej/research-2026-08-12-qr-print.md.
- */
-/**
- * The panel wraps the code and stops. An earlier version wrapped the label band too, which
- * printed as one white rectangle containing everything and read as a sticker stuck on a shirt
- * rather than a print. The research says the text goes "straight onto the fabric", and it is
- * right for the look as well as for the quiet zone.
- */
-Deno.test("the panel covers the code and not the label", () => {
+/** The black field covers the full file, so white text stays visible in a PDF or SVG viewer. */
+Deno.test("the dark-garment background covers the code and label", () => {
   const layout = layoutQr(URL_, { sizeMm: BACK, panel: true, label: "DEJTA" });
-  const panel = layout.shapes.find((s) => s.kind === "rect" && s.fill)!;
+  const background = layout.shapes.find((s) => s.kind === "rect" && s.fill === "#000000")!;
   const text = layout.shapes.find((s) => s.kind === "text")!;
 
-  assert(panel.kind === "rect" && text.kind === "text");
-  assertEquals(panel.w, panel.h, "the panel is square, so it holds the code and nothing else");
-  assert(text.baseline < panel.y, "the label sits above the panel, on the garment");
-  assertEquals(panel.y + panel.h, layout.heightUnits, "and the panel reaches the bottom edge");
+  assert(background.kind === "rect" && text.kind === "text");
+  assertEquals(background.y, 0);
+  assertEquals(background.w, layout.widthUnits);
+  assertEquals(background.h, layout.heightUnits);
+  assert(text.baseline < background.h, "the label sits on the black field");
 });
 
-/**
- * On a dark garment the label lands on fabric, not on the panel, so it has to be printed in the
- * light colour. Two colours in one file is what a garment printer expects: light for the panel
- * and the word, dark for the code.
- */
-Deno.test("a panelled label is painted light, an unpanelled one is not", () => {
+Deno.test("a dark-garment label is white, a light-garment label uses the black ink", () => {
   const panelled = renderSvg(URL_, { sizeMm: BACK, panel: true, label: "DEJTA" }).svg;
   const plain = renderSvg(URL_, { sizeMm: BACK, label: "DEJTA" }).svg;
 
@@ -151,17 +137,19 @@ Deno.test("a panelled label is painted light, an unpanelled one is not", () => {
   assert(!textOf(plain).includes("fill="), "without a panel the label just uses the ink");
 });
 
-Deno.test("a panel paints light behind the code and grows the artwork", () => {
+Deno.test("a dark garment gets a black field with white modules", () => {
   const plain = renderSvg(URL_, { sizeMm: BACK });
   const panelled = renderSvg(URL_, { sizeMm: BACK, panel: true });
 
   assertEquals(plain.applied.panel, false);
   assertEquals(panelled.applied.panel, true);
 
-  assertStringIncludes(panelled.svg, 'fill="#ffffff"', "the panel is painted");
-  assert(!plain.svg.includes('fill="#ffffff"'), "without a panel nothing is painted light");
+  assertStringIncludes(panelled.svg, 'fill="#000000"', "the background is black");
+  assertStringIncludes(panelled.svg, 'color="#ffffff"', "the code is white");
+  assertStringIncludes(panelled.svg, 'fill="#ffffff"', "the modules inherit white");
+  assert(!plain.svg.includes('fill="#ffffff"'), "the light-garment code stays black");
 
-  // The panel adds margin beyond the quiet zone, so the same code occupies a larger canvas.
+  // The dark field adds margin beyond the quiet zone, so the same code occupies a larger canvas.
   const box = (svg: string) => Number(svg.match(/viewBox="0 0 ([\d.]+)/)![1]);
   assert(box(panelled.svg) > box(plain.svg), "a panel makes the artwork wider");
 });

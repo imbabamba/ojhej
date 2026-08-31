@@ -20,6 +20,7 @@ import { renderVerifyMail } from "../mail/templates.ts";
 import { claimSignupSlot, linkCodeToEmail } from "../store/emails.ts";
 import { createCode } from "../store/shirts.ts";
 import { mintToken } from "../store/tokens.ts";
+import { isScanMode } from "../survey.ts";
 import { error, info } from "../log.ts";
 import { type AppContext, json, methodNotAllowed, refuse } from "./context.ts";
 
@@ -28,6 +29,7 @@ interface SignupBody {
   hemsida?: unknown;
   startedAt?: unknown;
   altcha?: unknown;
+  mode?: unknown;
 }
 
 async function readBody(request: Request): Promise<SignupBody | null> {
@@ -73,6 +75,13 @@ export async function handleSignup(ctx: AppContext, request: Request): Promise<R
     return json({ fel: "Det där ser inte ut som en mailadress." }, 400);
   }
 
+  // Missing means the original greeting for forms cached before surveys shipped. A value that
+  // names neither option is a user-correctable bad request, not something to guess at.
+  const submittedMode = body.mode === undefined ? "greeting" : body.mode;
+  if (!isScanMode(submittedMode)) {
+    return json({ fel: "Välj vad som ska hända efter skanningen." }, 400);
+  }
+
   const slot = await claimSignupSlot(ctx.store, email, now);
   if (!slot.allowed) {
     // Says plainly that the cap was hit. It reveals that this address has codes today,
@@ -88,7 +97,7 @@ export async function handleSignup(ctx: AppContext, request: Request): Promise<R
   let record;
   let token;
   try {
-    record = await createCode(ctx.store, ctx.emailKey, email, now);
+    record = await createCode(ctx.store, ctx.emailKey, email, now, submittedMode);
     // Recorded now so the owner can ask for a manage link by address later, without having
     // to remember a 20-character slug that lives on a garment.
     await linkCodeToEmail(ctx.store, email, record.slug);

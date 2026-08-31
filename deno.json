@@ -19,7 +19,8 @@
     "upload-assets": "deno run --allow-read --allow-env --allow-net scripts/upload-assets.ts",
     "mark": "deno run --allow-read --allow-write scripts/mark-png.ts",
     "smoke": "deno run --allow-net --allow-env scripts/smoke.ts",
-    "storage-probe": "deno run --allow-net --allow-env scripts/storage-probe.ts"
+    "storage-probe": "deno run --allow-net --allow-env scripts/storage-probe.ts",
+    "publish": "deno run --allow-read --allow-write --allow-run=git scripts/publish.ts"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.10",

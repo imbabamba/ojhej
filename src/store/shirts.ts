@@ -12,6 +12,13 @@
 
 import { decrypt, encrypt, isValidSlug, newSlug } from "./crypto.ts";
 import { type Design, isSyfte, type SyfteKey } from "../syfte.ts";
+import {
+  DEFAULT_SURVEY_QUESTIONS,
+  isScanMode,
+  type ScanMode,
+  surveyOf,
+  type SurveySetup,
+} from "../survey.ts";
 import type { ObjectStore } from "./storage.ts";
 
 export type CodeStatus = "pending" | "active" | "paused";
@@ -43,6 +50,10 @@ export interface CodeRecord {
    * the default applies, and empty means they chose to print the code with nothing above it.
    */
   etikett?: string;
+  /** What the scanner meets: absent is the original open greeting. */
+  mode?: ScanMode;
+  /** Owner-written prompts. Responses are relayed and never stored here. */
+  questions?: string[];
 }
 
 /** An unverified code disappears after a week, so an unwanted signup cannot linger. */
@@ -79,11 +90,14 @@ function parseRecord(raw: string): CodeRecord | null {
     // number or an object into a template, so anything of the wrong shape reads as unset rather
     // than failing the whole record. Losing a label costs a label; refusing the record costs the
     // owner their code.
+    const survey = surveyOf(record);
     return {
       ...record,
       syfte: isSyfte(record.syfte) ? record.syfte : undefined,
       rad: typeof record.rad === "string" ? record.rad : undefined,
       etikett: typeof record.etikett === "string" ? record.etikett : undefined,
+      mode: isScanMode(record.mode) && survey.mode === "survey" ? "survey" : undefined,
+      questions: survey.mode === "survey" ? survey.questions : undefined,
     };
   } catch {
     return null;
@@ -95,6 +109,7 @@ export async function createCode(
   key: CryptoKey,
   email: string,
   now: number = Date.now(),
+  mode: ScanMode = "greeting",
 ): Promise<CodeRecord> {
   // A blind put would silently overwrite an existing owner's record. At 96 bits a collision
   // is vanishingly unlikely, but this is also the failure mode a weakened entropy source
@@ -114,6 +129,7 @@ export async function createCode(
     msgCount: 0,
     msgToday: 0,
     msgDay: dayOf(now),
+    ...(mode === "survey" ? { mode, questions: [...DEFAULT_SURVEY_QUESTIONS] } : {}),
   };
   await store.put(keyFor(slug), JSON.stringify(record));
   return record;
@@ -240,6 +256,35 @@ export function setDesign(
     store,
     slug,
     (record) => ({ ...record, syfte: design.syfte, rad: design.rad, etikett: design.etikett }),
+    now,
+  );
+}
+
+/**
+ * Save the complete scanner experience in one object-store write.
+ *
+ * Purpose, printed text and form type are one save button in the UI. Writing them separately
+ * would let a remote-storage failure leave the preview describing a survey while the scanner
+ * still meets a greeting, or vice versa.
+ */
+export function setCodeSetup(
+  store: ObjectStore,
+  slug: string,
+  design: Design,
+  survey: SurveySetup,
+  now: number = Date.now(),
+): Promise<CodeRecord> {
+  return mutate(
+    store,
+    slug,
+    (record) => ({
+      ...record,
+      syfte: design.syfte,
+      rad: design.rad,
+      etikett: design.etikett,
+      mode: survey.mode === "survey" ? "survey" : undefined,
+      questions: survey.mode === "survey" ? survey.questions : undefined,
+    }),
     now,
   );
 }

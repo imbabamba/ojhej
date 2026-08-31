@@ -62,6 +62,12 @@ async function activeCode(h: Harness): Promise<string> {
   return record.slug;
 }
 
+async function activeSurvey(h: Harness): Promise<string> {
+  const record = await createCode(h.ctx.store, h.ctx.emailKey, OWNER, T0, "survey");
+  await setStatus(h.ctx.store, record.slug, "active", T0);
+  return record.slug;
+}
+
 /**
  * A body carrying a genuinely solved challenge, recorded first because a solution is spendable
  * only once and only if it was really issued. Pass null when the request should be rejected
@@ -126,6 +132,36 @@ Deno.test("a message reaches the owner, who never published the address", async 
   assertStringIncludes(text, "Kim");
   assertStringIncludes(text, "På pendeln mot Uppsala");
   assertStringIncludes(text, "kim@exempel.se");
+});
+
+Deno.test("survey answers reach the owner without being stored", async () => {
+  const h = await harness();
+  const slug = await activeSurvey(h);
+  h.now = LATER;
+  const answers = ["När jag målar.", "Promenad och middag.", "Dåliga ordvitsar."];
+
+  const response = await handleMessage(h.ctx, post(await goodBody(h, { slug, answers })));
+  assertEquals(response.status, 200);
+  assertEquals(h.sent.length, 1);
+
+  const text = String(mail(h).text_body);
+  for (const answer of answers) assertStringIncludes(text, answer);
+
+  const recordKey = `shirts/${slug}.json`;
+  const stored = (await h.handle.store.get(recordKey))!;
+  for (const answer of answers) assert(!stored.includes(answer), "answers must only pass through");
+});
+
+Deno.test("a survey requires one bounded answer per saved question", async () => {
+  for (const answers of [[], ["Bara ett"], ["A", "B", "C", "D"], ["A", "B", " "]]) {
+    const h = await harness();
+    const slug = await activeSurvey(h);
+    h.now = LATER;
+
+    const response = await handleMessage(h.ctx, post(await goodBody(h, { slug, answers })));
+    assertEquals(response.status, 400, JSON.stringify(answers));
+    assertEquals(h.sent.length, 0);
+  }
 });
 
 /**

@@ -59,6 +59,47 @@ Deno.test("the message reaches both parts", () => {
   assertStringIncludes(mail.html, "Elin");
 });
 
+Deno.test("survey answers and their questions reach both mail parts", () => {
+  const mail = renderMessageMail({
+    namn: "Sam",
+    answers: [
+      { question: "Vad gör dig glad?", answer: "Långa middagar." },
+      { question: "Din perfekta söndag?", answer: "Bad och en bok." },
+    ],
+    kanal: "instagram",
+    kontakt: "@sam",
+    antalIdag: 1,
+    maxPerDag: 20,
+    slugKort: "ojhej.se/s/K7M4…ABCD",
+    hanteraUrl: "https://ojhej.se/hantera",
+  });
+
+  for (const part of [mail.text, mail.html]) {
+    assertStringIncludes(part, "Vad gör dig glad?");
+    assertStringIncludes(part, "Långa middagar.");
+    assertStringIncludes(part, "Din perfekta söndag?");
+    assertStringIncludes(part, "Bad och en bok.");
+  }
+  assertEquals(mail.subject, "Någon svarade på dina frågor");
+});
+
+Deno.test("survey questions and answers cannot inject mail markup", () => {
+  const mail = renderMessageMail({
+    namn: "Sam",
+    answers: [{ question: "<b>Fråga?</b>", answer: '<img src=x onerror="x">' }],
+    kanal: "mail",
+    kontakt: "sam@exempel.se",
+    antalIdag: 1,
+    maxPerDag: 20,
+    slugKort: "ojhej.se/s/K7M4…ABCD",
+    hanteraUrl: "https://ojhej.se/hantera",
+  });
+
+  assert(!mail.html.includes("<b>Fråga?</b>"));
+  assert(!mail.html.includes('<img src=x onerror="x">'));
+  assertStringIncludes(mail.html, "&lt;b&gt;Fråga?&lt;/b&gt;");
+});
+
 /**
  * Four fields here are typed by a stranger into a public form and then rendered as HTML in
  * the owner's mail client. This is the highest-value injection surface in the product.

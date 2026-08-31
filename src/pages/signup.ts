@@ -13,7 +13,7 @@
 import { STATS_FLOOR } from "../store/stats.ts";
 import { MARK, page, siteFooter } from "./layout.ts";
 
-const FOOT_PRIVACY = "Meddelanden skickas vidare till dig och sparas inte hos oss.";
+const FOOT_PRIVACY = "Meddelanden och enkätsvar skickas vidare till dig och sparas inte hos oss.";
 
 /**
  * The landing page.
@@ -49,15 +49,15 @@ export function renderLanding(aktiverade: number | null = null): Response {
     ? `<p class="folio"><span class="folio-number">${aktiverade}</span> ${ord}</p>`
     : "";
 
-  const body = `<div class="screen screen--folio">
+  const body = `<div class="screen screen--folio landing">
 ${räknare}
-<div class="wrap pad-top grow" style="display:flex;flex-direction:column;justify-content:center">
-<div class="stack stack-xl">
+<main class="landing-wrap landing-main pad-top grow">
+<section class="landing-hero stack stack-xl">
 <div class="reveal">${MARK}</div>
 
 <div class="reveal stack stack-l">
 <h1 class="statement">Oj&nbsp;hej.</h1>
-<p class="lede">Någon skannar. Sen får vi se.</p>
+<p class="lede">Ett öppet hej, eller några frågor först. Du väljer vad som händer när någon skannar.</p>
 </div>
 
 <div class="reveal stack stack-s">
@@ -65,25 +65,34 @@ ${räknare}
 <p class="dry">Det tar en halv minut och kostar ingenting.</p>
 <p class="aside"><a href="/hantera">Har du redan en kod?</a></p>
 </div>
-</div>
-</div>
+</section>
 
-<div class="wrap pad-bottom">
-<details class="fold">
+<aside class="landing-how reveal" aria-label="Så fungerar det">
+<p class="eyebrow">En kod, på ditt sätt</p>
+<ol class="landing-steps">
+<li><span>01</span><div><strong>Välj öppet eller frågor</strong><p>Säg bara hej, eller låt personen svara på 2–5 frågor som du skriver.</p></div></li>
+<li><span>02</span><div><strong>Tryck koden var du vill</strong><p>Ladda ner färdiga original för tröja, vykort, keps eller tygkasse.</p></div></li>
+<li><span>03</span><div><strong>Få svaret i din mail</strong><p>Din adress förblir privat. Meddelanden och enkätsvar sparas aldrig hos oss.</p></div></li>
+</ol>
+</aside>
+</main>
+
+<div class="landing-wrap landing-bottom pad-bottom">
+<details class="fold landing-mobile-how">
 <summary>Hur funkar det?</summary>
 <div class="fold-body stack">
 <p class="aside">
-Du får en QR-kod med en egen adress. Tryck den på vad du vill: tröja, keps, tygkasse.
-Någon skannar den, skriver några rader, och meddelandet landar i din mail.
+Du får en QR-kod med en egen adress. Tryck den på vad du vill: tröja, vykort, keps eller
+tygkasse. Den som skannar kan skriva fritt eller svara på dina frågor.
 </p>
 <p class="aside">
-Du lämnar aldrig ut nummer, mail eller Instagram. Ingen ser vem du är förrän du svarar,
-och du måste inte svara.
+Allt landar i din mail utan att adressen visas. Ingen ser vem du är förrän du svarar, och du
+måste inte svara.
 </p>
 </div>
 </details>
-<div class="foot" style="border:0;padding-top:1rem">${FOOT_PRIVACY}</div>
-<div class="foot" style="border:0;padding-top:0">${siteFooter("hem")}</div>
+<div class="foot landing-privacy">${FOOT_PRIVACY}</div>
+<div class="foot landing-footer">${siteFooter("hem")}</div>
 </div>
 </div>`;
 
@@ -99,17 +108,31 @@ export function renderSkapa(): Response {
 <div class="reveal stack stack-l">
 <h1 class="headline">Skapa din kod.</h1>
 <p class="lede">
-Vi behöver bara en mailadress. Den används för att skicka vidare meddelanden till dig, och
-visas aldrig för någon annan.
+Välj vad som ska hända när någon skannar. Svar skickas till din mail, som aldrig visas för
+någon annan.
 </p>
 </div>
 
 <form class="reveal stack stack-l" id="form" data-endpoint="/api/skapa" data-next="/kolla-mailen">
+<fieldset class="field choice-fieldset">
+<legend class="legend">Efter skanningen</legend>
+<div class="choice-cards">
+<label class="choice-card">
+<input type="radio" name="mode" value="greeting" checked>
+<span><strong>Ett öppet hej</strong><small>Personen skriver fritt och lämnar ett sätt att svara.</small></span>
+</label>
+<label class="choice-card">
+<input type="radio" name="mode" value="survey">
+<span><strong>Några frågor</strong><small>Du ställer 2–5 frågor innan personen kan höra av sig.</small></span>
+</label>
+</div>
+</fieldset>
+
 <div class="field">
 <label for="epost">Din mailadress</label>
 <input class="input" id="epost" name="epost" type="email" inputmode="email"
   autocomplete="email" placeholder="du@exempel.se" maxlength="254" required>
-<p class="hint">Hit skickas meddelanden. Byt eller radera när du vill.</p>
+<p class="hint">Hit skickas meddelanden och enkätsvar. Byt eller radera när du vill.</p>
 </div>
 
 <div class="hp" aria-hidden="true">
@@ -127,7 +150,8 @@ visas aldrig för någon annan.
 <button class="btn" type="submit" id="skicka" disabled>Skicka verifieringslänk</button>
 <p class="aside" id="fel" style="color:var(--accent);display:none"></p>
 <p class="aside">
-Genom att fortsätta godkänner du att vi lagrar din mailadress krypterat, tills du raderar den.
+Genom att fortsätta godkänner du att vi lagrar din mailadress krypterat och dina frågor, tills
+du raderar koden. Svaren sparas aldrig hos oss.
 </p>
 </div>
 </form>

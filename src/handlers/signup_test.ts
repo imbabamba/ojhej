@@ -4,6 +4,7 @@ import { MIN_FILL_MS } from "../antispam/form.ts";
 import { importKey, sha256Hex } from "../store/crypto.ts";
 import { createMemoryStore, type MemoryStoreHandle } from "../store/storage.ts";
 import { MAX_SIGNUPS_PER_DAY } from "../store/emails.ts";
+import { DEFAULT_SURVEY_QUESTIONS } from "../survey.ts";
 import type { AppContext } from "./context.ts";
 import { handleSignup } from "./signup.ts";
 
@@ -104,6 +105,30 @@ Deno.test("a good signup creates a pending code and sends the verification mail"
   assertEquals(h.sent[0]!.body.to, ["anders@exempel.se"]);
   assertEquals(h.sent[0]!.body.subject, "Aktivera din kod");
   assertStringIncludes(String(h.sent[0]!.body.text_body), "https://ojhej.se/verifiera?t=");
+});
+
+Deno.test("choosing a survey creates a code with a useful editable draft", async () => {
+  const h = await harness();
+  h.now = LATER;
+
+  const response = await handleSignup(h.ctx, post(await goodBody(h, { mode: "survey" })));
+  assertEquals(response.status, 200);
+
+  const key = h.handle.keys().find((one) => one.startsWith("shirts/"));
+  const record = JSON.parse((await h.handle.store.get(key!))!);
+  assertEquals(record.mode, "survey");
+  assertEquals(record.questions, DEFAULT_SURVEY_QUESTIONS);
+});
+
+Deno.test("an unknown scan mode is refused rather than guessed", async () => {
+  const h = await harness();
+  h.now = LATER;
+
+  const response = await handleSignup(h.ctx, post(await goodBody(h, { mode: "horoscope" })));
+  assertEquals(response.status, 400);
+  assertStringIncludes(await response.text(), "skanningen");
+  assertEquals(h.sent.length, 0);
+  assertEquals(h.handle.keys().filter((key) => !key.startsWith("altcha/")), []);
 });
 
 /**

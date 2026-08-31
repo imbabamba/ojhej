@@ -32,7 +32,7 @@ export const VERSIONED_ASSETS = ["fonts.css", "style.css", "app.js"] as const;
  * to hash at startup, and a constant a person has to remember to bump is a constant that goes
  * stale on the change that mattered.
  */
-export const ASSET_VERSION = "2b12243c5e9a081b";
+export const ASSET_VERSION = "dc31bf1ec0981bc6";
 
 /** The URL a page should ask for an asset by. */
 export function assetUrl(name: string): string {

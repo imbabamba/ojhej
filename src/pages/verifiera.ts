@@ -28,7 +28,7 @@ export function renderVerifieraConfirm(token: string): Response {
 
 <div class="reveal stack stack-l">
 <h1 class="headline">Nästan igång.</h1>
-<p class="lede">Ett klick till, så kan din kod ta emot meddelanden.</p>
+<p class="lede">Ett klick till, så kan din kod ta emot svar.</p>
 </div>
 
 <form class="reveal stack stack-s" method="post" action="/verifiera">

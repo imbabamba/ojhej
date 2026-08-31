@@ -16,20 +16,18 @@ import { type EcLevel, encodeQr, type QrCode } from "./encode.ts";
 export interface QrOptions {
   /** Physical width of the finished square, including the quiet zone. */
   sizeMm: number;
-  /** One ink for the code and the wordmark, so the print stays single colour. */
+  /** One ink for the code and the wordmark on a light garment. */
   colour?: string;
   /** Uppercase text above the code. Dropped on small prints, where there is no room. */
   label?: string;
   /** The brand mark in the centre. Forces error correction H. */
   mark?: boolean;
   /**
-   * Print the code inside a light panel instead of straight onto the garment.
+   * Render the dark-garment file: a white code on an explicit black background.
    *
-   * This is how a dark garment is served, and it is not the obvious answer. The obvious answer
-   * is white ink, and it is wrong: inverted codes are read by only about 80 to 90 percent of
-   * scanners, and recent iPhones re-invert the image before decoding, so testing one on your
-   * own phone tells you nothing about everyone else's. A dark code on a light panel is read by
-   * everything. See specs/ojhej/research-2026-08-12-qr-print.md.
+   * The black field makes the intended polarity unambiguous both in the browser and when a
+   * print shop opens the file on a white canvas. On a black garment it blends into the fabric.
+   * The property keeps its old name because it is part of existing download URLs.
    */
   panel?: boolean;
 }
@@ -42,7 +40,7 @@ export interface RectShape {
   w: number;
   h: number;
   radius: number;
-  /** Overrides the layout ink. Only the panel uses this, and only ever to paint light. */
+  /** Overrides the layout ink for this shape. */
   fill?: string;
 }
 
@@ -65,7 +63,7 @@ export interface TextShape {
   size: number;
   letterSpacing: number;
   value: string;
-  /** Overrides the layout ink. Set when the label sits on the garment rather than the panel. */
+  /** Overrides the layout ink for this text. */
   fill?: string;
 }
 
@@ -91,16 +89,17 @@ export const PLAIN_BELOW_MM = 100;
 export const QUIET = 4;
 
 /**
- * Two further modules of panel beyond the quiet zone, when a panel is used.
+ * Two further modules of background beyond the quiet zone in a dark-garment file.
  *
- * Fabric edges are mangled by the weave, so a panel that stops exactly at the quiet zone
+ * Fabric edges are mangled by the weave, so a field that stops exactly at the quiet zone
  * loses part of the quiet zone to a frayed edge. The extra two modules are the margin for
  * that. Also from the print research.
  */
 export const PANEL_EXTRA = 2;
 
-/** What the panel and, on a panelled print, the label are painted in. */
-export const PANEL_FILL = "#ffffff";
+/** Fixed polarity for a dark-garment file. */
+export const DARK_BACKGROUND = "#000000";
+export const DARK_INK = "#ffffff";
 
 /** What the text above the code says unless someone changes it. */
 export const DEFAULT_LABEL = "DEJTA";
@@ -165,7 +164,7 @@ export function layoutQr(url: string, options: QrOptions): QrLayout {
   const ec: EcLevel = "H";
   const code = encodeQr(url, ec);
 
-  // A panel adds margin on every side, so the artwork grows and the code shifts inward. The
+  // A dark field adds margin on every side, so the artwork grows and the code shifts inward. The
   // quiet zone is unchanged: the extra is panel *beyond* it, not quiet zone taken from it.
   const pad = panel ? PANEL_EXTRA : 0;
   const quiet = QUIET + pad;
@@ -177,18 +176,17 @@ export function layoutQr(url: string, options: QrOptions): QrLayout {
   const shapes: Shape[] = [];
 
   if (panel) {
-    // Only the code sits on the panel. The label stays on the fabric above it, because a panel
-    // big enough to hold both reads as a sticker stuck on a shirt rather than a print, and the
-    // research is explicit that the text "never has to sit inside the panel and steal quiet
-    // zone". Painted first so everything else lands on top of it.
+    // Cover the complete artwork, including the label band. A transparent label band looks fine
+    // on the garment but disappears when the PDF is opened on a white viewer canvas. Painted
+    // first so the white modules and text land on top of it.
     shapes.push({
       kind: "rect",
       x: 0,
-      y: labelBand,
+      y: 0,
       w: across,
-      h: across,
+      h: totalHeight,
       radius: 0,
-      fill: PANEL_FILL,
+      fill: DARK_BACKGROUND,
     });
   }
 
@@ -244,10 +242,7 @@ export function layoutQr(url: string, options: QrOptions): QrLayout {
       size: labelBand * 0.72,
       letterSpacing: labelBand * 0.03,
       value: label,
-      // On a panelled print the text lands on dark fabric, so it is printed in the panel
-      // colour rather than the ink. Two colours in one file, which is what a garment printer
-      // expects: light for the panel and the word, dark for the code.
-      ...(panel ? { fill: PANEL_FILL } : {}),
+      ...(panel ? { fill: DARK_INK } : {}),
     });
   }
 
@@ -258,7 +253,7 @@ export function layoutQr(url: string, options: QrOptions): QrLayout {
     heightUnits: totalHeight,
     widthMm: options.sizeMm,
     heightMm: (options.sizeMm / across) * totalHeight,
-    colour: options.colour ?? "#000000",
+    colour: panel ? DARK_INK : (options.colour ?? "#000000"),
     applied: { mark, panel, ec, moduleMm: options.sizeMm / across },
   };
 }

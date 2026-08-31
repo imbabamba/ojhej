@@ -9,10 +9,12 @@ import {
   getCode,
   PENDING_TTL_MS,
   readOwnerEmail,
+  setCodeSetup,
   setDesign,
   setOwnerEmail,
   setStatus,
 } from "./shirts.ts";
+import { DEFAULT_SURVEY_QUESTIONS, surveyOf } from "../survey.ts";
 
 const KEY = "3q2+796tvu/erb7v3q2+796tvu/erb7v3q2+796tvu8=";
 const DAY = 86_400_000;
@@ -190,6 +192,36 @@ Deno.test("a new code has no purpose written down, and reads as the default", as
   assertEquals(record.etikett, undefined);
   assertEquals(syfteOf(record), "hej");
   assertEquals(radFor(record), "", "so the scan page is exactly what it was");
+});
+
+Deno.test("a code can start as a survey without changing the original default", async () => {
+  const { store, key } = await setup();
+  const greeting = await createCode(store, key, "anders@exempel.se", T0);
+  const survey = await createCode(store, key, "anders@exempel.se", T0, "survey");
+
+  assertEquals(surveyOf(greeting), { mode: "greeting", questions: [] });
+  assertEquals(surveyOf(survey), {
+    mode: "survey",
+    questions: [...DEFAULT_SURVEY_QUESTIONS],
+  });
+});
+
+Deno.test("the scanner setup saves purpose and survey atomically", async () => {
+  const { store, key } = await setup();
+  const record = await createCode(store, key, "anders@exempel.se", T0);
+
+  const updated = await setCodeSetup(
+    store,
+    record.slug,
+    { syfte: "eget", rad: "Svara om du vill.", etikett: "FRÅGOR?" },
+    { mode: "survey", questions: ["Vad läser du?", "Kaffe eller te?"] },
+    T0,
+  );
+
+  assertEquals(updated.syfte, "eget");
+  assertEquals(updated.mode, "survey");
+  assertEquals(updated.questions, ["Vad läser du?", "Kaffe eller te?"]);
+  assertEquals(updated.msgCount, 0);
 });
 
 Deno.test("setDesign stores the purpose, the line and the printed label", async () => {

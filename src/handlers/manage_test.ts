@@ -760,6 +760,47 @@ Deno.test("setting a purpose stores it and hands back a link to that code", asyn
   assert(fresh.length > 0, "the page keeps working without a trip back to the inbox");
 });
 
+Deno.test("setting a survey stores its questions with the rest of the scanner setup", async () => {
+  const h = await harness();
+  const slug = await ownedCode(h);
+  h.now = LATER;
+
+  const response = await handleManageAction(
+    h.ctx,
+    act({
+      t: await linkFor(h, slug),
+      atgard: "syfte",
+      syfte: "hej",
+      mode: "survey",
+      questions: ["Vad läser du?", "Kaffe eller te?"],
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  const record = (await getCode(h.ctx.store, slug, h.now))!;
+  assertEquals(record.mode, "survey");
+  assertEquals(record.questions, ["Vad läser du?", "Kaffe eller te?"]);
+});
+
+Deno.test("an incomplete survey is refused before the management link is spent", async () => {
+  const h = await harness();
+  const slug = await ownedCode(h);
+  h.now = LATER;
+  const token = await linkFor(h, slug);
+
+  const bad = await handleManageAction(
+    h.ctx,
+    act({ t: token, atgard: "syfte", syfte: "hej", mode: "survey", questions: ["Bara en?"] }),
+  );
+  assertEquals(bad.status, 400);
+
+  const good = await handleManageAction(
+    h.ctx,
+    act({ t: token, atgard: "syfte", syfte: "hej", mode: "greeting" }),
+  );
+  assertEquals(good.status, 200, "the correction can use the same link");
+});
+
 Deno.test("an own line is stored only for eget", async () => {
   const h = await harness();
   const slug = await ownedCode(h);

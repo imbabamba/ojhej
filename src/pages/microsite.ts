@@ -17,6 +17,7 @@
 
 import { escapeHtml, MARK, page, siteFooter } from "./layout.ts";
 import { radFor } from "../syfte.ts";
+import { MAX_ANSWER, surveyOf } from "../survey.ts";
 import type { CodeRecord } from "../store/shirts.ts";
 
 /*
@@ -140,6 +141,7 @@ export function renderCapped(): Response {
 export function renderActive(record: CodeRecord): Response {
   const slug = escapeHtml(record.slug);
   const rad = radFor(record);
+  const survey = surveyOf(record);
 
   // Escaped, and rendered as text rather than as anything clickable. An owner's line that could
   // become a working link would make this page a place to publish one, and a stranger who
@@ -148,6 +150,40 @@ export function renderActive(record: CodeRecord): Response {
     ? `<p class="lede">${escapeHtml(rad)}</p>`
     : `<p class="lede">Du skannade den faktiskt.</p>`;
   const dry = rad ? "" : `\n<p class="dry">Eller gå vidare. Ingen märker något.</p>`;
+
+  const surveyFields = survey.mode === "survey"
+    ? `<div class="survey-progress">
+<p class="eyebrow">${survey.questions.length} frågor · ungefär 2 minuter</p>
+<p class="aside">Svara som dig själv. Personen bakom koden får allt samlat i ett mail.</p>
+</div>
+${
+      survey.questions.map((question, index) =>
+        `<div class="field survey-answer">
+<label class="survey-question" for="svar-${index + 1}"><span>${index + 1}</span>${
+          escapeHtml(question)
+        }</label>
+<textarea class="textarea" id="svar-${index + 1}" rows="3" maxlength="${MAX_ANSWER}"
+  data-survey-answer placeholder="Ditt svar" required></textarea>
+</div>`
+      ).join("\n")
+    }`
+    : `<div class="field">
+<label for="var">Var såg du mig?</label>
+<input class="input" id="var" name="var" type="text" maxlength="120"
+  placeholder="Pendeltåget, kön till kaffet …" required>
+</div>
+
+<div class="field">
+<label for="meddelande">Meddelande <span class="counter" id="count">0 / 600</span></label>
+<textarea class="textarea" id="meddelande" name="meddelande" rows="4" maxlength="600"
+  placeholder="Säg något. Vad som helst är bättre än ingenting." required></textarea>
+</div>`;
+
+  const action = survey.mode === "survey" ? "Svara på frågorna" : "Säg hej";
+  const privacy = survey.mode === "survey"
+    ? "Dina svar går direkt till personen bakom koden. Vi sparar varken svaren eller dina kontaktuppgifter."
+    : `Meddelandet går direkt till personen bakom koden. Vi sparar det inte, och du får inte veta
+  om hen läser det.`;
 
   const body = shell(
     `<div class="stack stack-xl">
@@ -159,12 +195,14 @@ ${spoken}
 </div>
 
 <div class="reveal stack stack-s" id="cta">
-<button class="btn" type="button" id="open">Säg hej</button>${dry}
+<button class="btn" type="button" id="open">${action}</button>${dry}
 </div>
 </div>
 
 <div class="panel" id="panel"><div>
-<form class="stack stack-l" id="form" data-endpoint="/api/meddelande" data-next="/skickat" style="padding-top:3rem">
+<form class="stack stack-l" id="form" data-endpoint="/api/meddelande" data-next="/skickat${
+      survey.mode === "survey" ? "?typ=enkat" : ""
+    }" style="padding-top:3rem">
 <hr class="rule">
 <input type="hidden" name="slug" value="${slug}">
 
@@ -174,17 +212,7 @@ ${spoken}
   placeholder="Förnamn räcker" maxlength="80" required>
 </div>
 
-<div class="field">
-<label for="var">Var såg du mig?</label>
-<input class="input" id="var" name="var" type="text" maxlength="120"
-  placeholder="Pendeltåget, kön till kaffet …" required>
-</div>
-
-<div class="field">
-<label for="meddelande">Meddelande <span class="counter" id="count">0 / 600</span></label>
-<textarea class="textarea" id="meddelande" name="meddelande" rows="4" maxlength="600"
-  placeholder="Säg något. Vad som helst är bättre än ingenting." required></textarea>
-</div>
+${surveyFields}
 
 <fieldset style="border:0;padding:0;margin:0">
 <legend class="legend">Hur når jag dig?</legend>
@@ -193,7 +221,8 @@ ${spoken}
 <input type="radio" id="k-insta" name="kanal" value="instagram"><label for="k-insta">Instagram</label>
 <input type="radio" id="k-tel" name="kanal" value="telefon"><label for="k-tel">Telefon</label>
 </div>
-<input class="input" id="kontakt" name="kontakt" type="text" maxlength="120"
+<input class="input" id="kontakt" name="kontakt" type="email" inputmode="email"
+  autocomplete="email" maxlength="120"
   placeholder="du@exempel.se" required style="margin-top:1rem">
 </fieldset>
 
@@ -212,8 +241,7 @@ ${spoken}
 <button class="btn" type="submit" id="skicka" disabled>Skicka</button>
 <p class="aside" id="fel" style="color:var(--accent);display:none"></p>
 <p class="aside">
-  Meddelandet går direkt till personen bakom koden. Vi sparar det inte, och du får inte veta
-  om hen läser det.
+  ${privacy}
 </p>
 </div>
 </form>
@@ -229,18 +257,24 @@ ${spoken}
   });
 }
 
-export function renderSent(): Response {
+export function renderSent(kind: "greeting" | "survey" = "greeting"): Response {
+  const survey = kind === "survey";
   return page({
     title: "Skickat · Oj hej.",
     body: shell(`<div class="stack stack-xl">
 <div class="reveal">${MARK}</div>
 <div class="reveal stack stack-l">
-<h1 class="statement">Skickat.</h1>
-<p class="lede">Meddelandet är på väg. Vill hen svara så hör hen av sig, på det sätt du angav.</p>
+<h1 class="statement">${survey ? "Svarat." : "Skickat."}</h1>
+<p class="lede">${
+      survey
+        ? "Dina svar är på väg. Vill hen höra av sig gör hen det på sättet du angav."
+        : "Meddelandet är på väg. Vill hen svara så hör hen av sig, på det sätt du angav."
+    }</p>
 <p class="dry">Nu ligger bollen inte längre hos dig.</p>
 </div>
 <div class="reveal"><p class="aside">
-Vi sparar varken meddelandet eller dina kontaktuppgifter. Det här är enda gången sidan nämner det.
+Vi sparar varken ${survey ? "svaren" : "meddelandet"} eller dina kontaktuppgifter. Det här är
+enda gången sidan nämner det.
 </p></div>
 </div>`),
   });

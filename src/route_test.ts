@@ -234,6 +234,17 @@ Deno.test("the QR is the only thing allowed to be cached", async () => {
   assertEquals(small, again, "the same request must produce the same bytes");
 });
 
+Deno.test("the live QR preview is never cached", async () => {
+  const ctx = await context();
+  const slug = (await createCode(ctx.store, ctx.emailKey, "anders@exempel.se", ctx.now())).slug;
+
+  const response = await route(
+    ctx,
+    get(`/api/qr/${slug}.svg?mm=180&text=DEJTA&forhandsvisning=1`),
+  );
+  assertEquals(response!.headers.get("cache-control"), "no-store");
+});
+
 /**
  * The redirect from plain HTTP is the pull zone's job and happens before this script wakes. This
  * is the half that keeps the plaintext request from being made at all.
@@ -375,7 +386,8 @@ Deno.test("the render route honours the panel and refuses to style the code", as
   const plain = await (await route(ctx, get(`/api/qr/${slug}.svg?mm=180`)))!.text();
   const panelled = await (await route(ctx, get(`/api/qr/${slug}.svg?mm=180&platta=ja`)))!.text();
 
-  assert(!plain.includes('fill="#ffffff"'), "no panel unless asked for");
+  assert(!plain.includes('fill="#ffffff"'), "the light-garment code is black");
+  assertStringIncludes(panelled, 'fill="#000000"');
   assertStringIncludes(panelled, 'fill="#ffffff"');
 
   // The old form parameter is gone, and passing it must not resurrect anything.

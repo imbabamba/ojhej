@@ -17,12 +17,19 @@
 import { MAX_LABEL } from "../qr/layout.ts";
 import { escapeHtml, MARK, page, siteFooter } from "./layout.ts";
 import { etikettFor, MAX_RAD, radFor, SYFTE_ORDER, SYFTEN, syfteOf } from "../syfte.ts";
+import {
+  DEFAULT_SURVEY_QUESTIONS,
+  MAX_QUESTION,
+  MAX_SURVEY_QUESTIONS,
+  MIN_SURVEY_QUESTIONS,
+  surveyOf,
+} from "../survey.ts";
 import type { CodeRecord } from "../store/shirts.ts";
 
 function shell(inner: string, foot: string): string {
   return `<div class="screen">
-<div class="wrap pad-top grow">${inner}</div>
-<div class="wrap pad-bottom"><div class="foot">${foot}</div></div>
+<div class="wrap setup-wrap pad-top grow">${inner}</div>
+<div class="wrap setup-wrap pad-bottom"><div class="foot">${foot}</div></div>
 </div>`;
 }
 
@@ -62,6 +69,7 @@ function picker(record: CodeRecord): string {
   const valt = syfteOf(record);
   const rad = radFor(record);
   const egen = valt === "eget" ? (record.rad ?? "") : "";
+  const survey = surveyOf(record);
 
   // Each chip carries its own preset, so the client holds no second copy of the list. A copy
   // there would be another thing to reword, and the one that got forgotten would be the one a
@@ -74,7 +82,49 @@ function picker(record: CodeRecord): string {
     }">${escapeHtml(SYFTEN[key].namn)}</button>`
   ).join("\n");
 
+  const draftQuestions = survey.mode === "survey" ? survey.questions : DEFAULT_SURVEY_QUESTIONS;
+  const questions = draftQuestions.map((question, index) =>
+    `<div class="question-row" data-question>
+<label for="fraga-${index + 1}">Fråga ${index + 1}</label>
+<div class="question-control">
+<input class="input" id="fraga-${index + 1}" type="text" maxlength="${MAX_QUESTION}"
+  value="${escapeHtml(question)}" placeholder="Skriv en fråga">
+<button class="remove-question" type="button" data-remove-question
+  aria-label="Ta bort fråga ${index + 1}">Ta bort</button>
+</div>
+</div>`
+  ).join("\n");
+
   return `<div class="field">
+<span class="legend">Vad händer efter skanningen?</span>
+<div class="mode-cards" id="scan-mode">
+<button class="mode-card" type="button" data-mode="greeting" aria-pressed="${
+    survey.mode === "greeting"
+  }">
+<strong>Ett öppet hej</strong><span>Personen skriver fritt och lämnar ett sätt att svara.</span>
+</button>
+<button class="mode-card" type="button" data-mode="survey" aria-pressed="${
+    survey.mode === "survey"
+  }">
+<strong>Några frågor</strong><span>Personen svarar på din korta enkät först.</span>
+</button>
+</div>
+<p class="hint">Svaren mailas direkt till dig och sparas aldrig hos oss.</p>
+</div>
+
+<div class="survey-builder" id="survey-builder" data-min="${MIN_SURVEY_QUESTIONS}"
+  data-max="${MAX_SURVEY_QUESTIONS}"${survey.mode === "survey" ? "" : " hidden"}>
+<div class="section-head">
+<div><p class="legend">Dina frågor</p><p class="hint">Kort och personligt brukar kännas bäst.</p></div>
+<button class="copy" type="button" id="add-question">Lägg till</button>
+</div>
+<div id="questions" class="questions">
+${questions}
+</div>
+<p class="aside" id="question-hint">Minst ${MIN_SURVEY_QUESTIONS}, högst ${MAX_SURVEY_QUESTIONS} frågor.</p>
+</div>
+
+<div class="field">
 <span class="legend">Vad är koden till?</span>
 <div class="chips" id="syfte">
 ${chips}
@@ -101,6 +151,11 @@ säga varför någon står där, inte bli en plats att publicera på.
 <p class="rad${rad ? "" : " rad--tom"}" id="forhandsrad" data-tom="${escapeHtml(TOM)}">${
     escapeHtml(rad || TOM)
   }</p>
+<p class="hint" id="forhandsflode">${
+    survey.mode === "survey"
+      ? `Sedan svarar personen på ${survey.questions.length} frågor.`
+      : "Sedan kan personen skriva ett öppet meddelande."
+  }</p>
 </div>`;
 }
 
@@ -115,8 +170,8 @@ export function renderKlar(
   const etikett = etikettFor(record);
 
   const body = shell(
-    `<div class="stack stack-xl">
-<div class="reveal stack stack-l">
+    `<div class="stack stack-xl setup-grid">
+<div class="reveal stack stack-l setup-intro">
 <p class="eyebrow">Klart</p>
 <h1 class="headline">Din kod<br>är klar.</h1>
 <p class="lede">
@@ -124,23 +179,23 @@ Det här är din adress. Den går inte att gissa sig till, så ingen hittar den 
 </p>
 </div>
 
-<div class="reveal stack stack-s">
+<div class="reveal stack stack-s setup-address">
 <div class="slug">
 <code id="adress">${escapeHtml(address)}</code>
 <button class="copy" type="button" data-copy="#adress">Kopiera</button>
 </div>
 </div>
 
-<div class="reveal stack stack-s">
+<div class="reveal stack stack-s setup-preview">
 <div class="qr-frame" id="forhandsvisning">
 <img id="preview" src="/api/qr/${safe}.svg?mm=180&amp;platta=nej&amp;text=${
       encodeURIComponent(etikett)
-    }" alt="Din QR-kod" width="240" height="290">
+    }&amp;forhandsvisning=1" alt="Din QR-kod" width="240" height="290">
 </div>
 <p class="aside">Skanna den med telefonen. Den leder hit, till din egen sida.</p>
 </div>
 
-<div class="reveal stack stack-l" id="designer">
+<div class="reveal stack stack-l setup-editor" id="designer">
 ${token === null ? "" : picker(record)}
 
 <div class="field">
@@ -168,12 +223,12 @@ ${
     }
 </div>
 
-<div class="reveal stack stack-s">
+<div class="reveal stack stack-s setup-downloads">
 <p class="aside">Ladda ner och ta med till tryckeriet. SVG är originalet, PDF om de hellre vill ha det.</p>
 <div id="downloads"></div>
 </div>
 
-<div class="reveal">
+<div class="reveal setup-notice">
 <div class="notice">
 Spara inte den här sidan som ditt enda minne. Adressen finns på trycket, och en ny länk hit
 begär du under <a href="/hantera">Hantera koder</a>, med mailadressen du skapade koden med.

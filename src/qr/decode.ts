@@ -40,8 +40,8 @@ export function layoutToGrid(layout: QrLayout): boolean[][] {
   for (const shape of layout.shapes) {
     switch (shape.kind) {
       case "rect": {
-        // The panel is a light rectangle behind everything, not a dark module. Painting it
-        // would fill the grid solid and decode as nothing at all.
+        // The explicit garment background is not a QR module. Painting it into this logical
+        // matrix would fill the grid solid and decode as nothing at all.
         if (shape.fill) break;
         for (let y = Math.round(shape.y); y < Math.round(shape.y + shape.h); y++) {
           for (let x = Math.round(shape.x); x < Math.round(shape.x + shape.w); x++) paint(x, y);
@@ -78,17 +78,29 @@ export function decodeLayout(layout: QrLayout): string | null {
   const grid = layoutToGrid(layout);
   const across = grid.length;
   const size = across * SCALE;
+  const inverted = layout.applied.panel;
 
   const pixels = new Uint8ClampedArray(size * size * 4).fill(255);
+  if (inverted) {
+    // Reproduce the real dark-garment polarity: black field, opaque white modules. This makes
+    // the test exercise inversion support rather than silently checking a conventional black
+    // code built from the same geometry.
+    for (let at = 0; at < pixels.length; at += 4) {
+      pixels[at] = 0;
+      pixels[at + 1] = 0;
+      pixels[at + 2] = 0;
+      pixels[at + 3] = 255;
+    }
+  }
   for (let y = 0; y < across; y++) {
     for (let x = 0; x < across; x++) {
       if (!grid[y]![x]) continue;
       for (let a = 0; a < SCALE; a++) {
         for (let b = 0; b < SCALE; b++) {
           const at = ((y * SCALE + a) * size + (x * SCALE + b)) * 4;
-          pixels[at] = 0;
-          pixels[at + 1] = 0;
-          pixels[at + 2] = 0;
+          pixels[at] = inverted ? 255 : 0;
+          pixels[at + 1] = inverted ? 255 : 0;
+          pixels[at + 2] = inverted ? 255 : 0;
         }
       }
     }

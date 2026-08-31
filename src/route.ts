@@ -79,7 +79,7 @@ const HSTS_MAX_AGE_SECONDS = 31_536_000;
  * secret. It is also deterministic, with no timestamp, nonce or random mask anywhere in the
  * renderer, so two isolates produce the same bytes.
  *
- * A day rather than a year, because the label and the panel are rendered into the file and an
+ * A day rather than a year, because the label and garment polarity are rendered into the file and an
  * owner who changes them should not wait out a long cache to see it. Every knob lives in the
  * query string, so this is only safe while the pull zone keeps the query string in the cache
  * key: without that, `?mm=40` and `?mm=180&platta=ja` collapse onto one entry and a print shop
@@ -184,8 +184,8 @@ async function answer(ctx: AppContext, request: Request): Promise<Response | nul
       // actually saved was capped at MAX_LABEL and forced onto one line. Two rules for one
       // field is how the looser one gets found.
       label: cleanLabel(params.get("text") ?? etikettFor(record)),
-      // A light panel is how a dark garment is served. Not white ink: inverted codes are read
-      // by only 80 to 90 percent of scanners. See the print research.
+      // The old `platta` name remains in public URLs, but now selects the requested dark-garment
+      // treatment: white modules and text on an explicit black field.
       panel: params.get("platta") === "ja",
       mark: params.get("marke") !== "nej",
     };
@@ -205,13 +205,18 @@ async function answer(ctx: AppContext, request: Request): Promise<Response | nul
     // shop is sent are the same code by construction rather than by care.
     const target = `${ctx.config.baseUrl}/s/${slug}`;
 
+    // The editor preview must reflect each keystroke, including a change made moments after the
+    // previous image was rendered. Downloads stay cacheable; this deliberately named preview
+    // request does not.
+    const cacheControl = params.get("forhandsvisning") === "1" ? "no-store" : QR_CACHE_CONTROL;
+
     if (format === "pdf") {
       const { pdf } = renderPdf(target, options);
       return new Response(pdf.slice().buffer, {
         headers: {
           "content-type": "application/pdf",
           "content-disposition": disposition,
-          "cache-control": QR_CACHE_CONTROL,
+          "cache-control": cacheControl,
         },
       });
     }
@@ -220,7 +225,7 @@ async function answer(ctx: AppContext, request: Request): Promise<Response | nul
       headers: {
         "content-type": "image/svg+xml; charset=utf-8",
         "content-disposition": disposition,
-        "cache-control": QR_CACHE_CONTROL,
+        "cache-control": cacheControl,
       },
     });
   }
@@ -255,7 +260,10 @@ async function answer(ctx: AppContext, request: Request): Promise<Response | nul
     const byte = new URL(request.url).searchParams.has("byte");
     return renderKollaMailen(byte ? "byte" : "signup");
   }
-  if (path === "/skickat") return renderSent();
+  if (path === "/skickat") {
+    const survey = new URL(request.url).searchParams.get("typ") === "enkat";
+    return renderSent(survey ? "survey" : "greeting");
+  }
   if (path === "/raderad") return renderRaderad();
   if (path === "/bytt") return renderBytt();
 

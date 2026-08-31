@@ -44,6 +44,23 @@ Deno.test("with a token the picker is there, with every purpose", async () => {
     assertStringIncludes(html, SYFTEN[key].namn);
   }
   assertStringIncludes(html, 'window.OJHEJ_T="t0ken"');
+  assertStringIncludes(html, 'id="scan-mode"');
+  assertStringIncludes(html, 'data-mode="greeting"');
+  assertStringIncludes(html, 'data-mode="survey"');
+});
+
+Deno.test("a saved survey comes back into the question builder", async () => {
+  const html = await renderKlar(
+    code({ mode: "survey", questions: ["Vad läser du?", "Kaffe eller te?"] }),
+    "https://ojhej.se",
+    "t0ken",
+  ).text();
+
+  assertStringIncludes(html, 'data-mode="survey" aria-pressed="true"');
+  assert(!html.includes('id="survey-builder" data-min="2"\n  data-max="5" hidden'));
+  assertStringIncludes(html, 'value="Vad läser du?"');
+  assertStringIncludes(html, 'value="Kaffe eller te?"');
+  assertStringIncludes(html, "Sedan svarar personen på 2 frågor.");
 });
 
 /** Which chip is pressed, read out of the markup the way a browser would. */

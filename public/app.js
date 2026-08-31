@@ -20,6 +20,15 @@
   var label = document.getElementById("altcha-text");
   var submit = document.getElementById("skicka");
   var fel = document.getElementById("fel");
+  var submitText = submit ? submit.textContent : "Skicka";
+  var preparing = null;
+  var sending = false;
+
+  // The server refuses a form completed in under 2.5 seconds. Autofill can make a real person
+  // faster than that, so hold their first click for the remaining fraction instead of sending a
+  // request we already know will be rejected. The small margin avoids a clock-boundary race.
+  var MIN_FORM_AGE_MS = 2600;
+  var REQUEST_TIMEOUT_MS = 15000;
 
   function say(text, done) {
     if (label) label.textContent = text;
@@ -50,80 +59,155 @@
     return null;
   }
 
-  async function prepare() {
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function showError(message) {
+    if (!fel) return;
+    fel.textContent = message;
+    fel.style.display = "block";
+  }
+
+  async function fetchTimed(input, init) {
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
     try {
-      say("Förbereder …", false);
-      // A fresh challenge, from the network, every single time.
-      //
-      // 2026-08-14: /api/altcha went out carrying a thirty day max-age, so browsers stored one
-      // challenge and went on replaying it. The proof of work is single use by design, so every
-      // submission after the first was refused with "Det gick inte att skicka just nu", and the
-      // only cure a visitor had was clearing their browser cache.
-      //
-      // Correcting the header on the server cannot reach an entry already sitting in somebody's
-      // cache, and those entries live until mid September. A URL the cache has never seen is the
-      // one thing that misses it in every browser; `no-store` says the same to those that listen.
-      var fresh = "/api/altcha?f=" + Date.now() + "-" + Math.random().toString(36).slice(2);
-      var challenge = await (await fetch(fresh, { cache: "no-store" })).json();
-      var number = await solve(challenge);
-      if (number === null) throw new Error("unsolved");
-
-      solved = btoa(JSON.stringify({
-        algorithm: challenge.algorithm,
-        challenge: challenge.challenge,
-        number: number,
-        salt: challenge.salt,
-        signature: challenge.signature,
-      }));
-
-      say("Verifierad som människa", true);
-      if (submit) submit.disabled = false;
-    } catch (_) {
-      // Fail visibly. Silently leaving the button disabled would look like a broken page.
-      say("Kunde inte förbereda. Ladda om sidan.", false);
+      var options = Object.assign({}, init || {}, { signal: controller.signal });
+      return await fetch(input, options);
+    } finally {
+      clearTimeout(timeout);
     }
+  }
+
+  async function prepare() {
+    if (preparing) return preparing;
+
+    solved = null;
+    if (submit) submit.disabled = true;
+    preparing = (async function () {
+      try {
+        say("Förbereder …", false);
+        // A fresh challenge, from the network, every single time.
+        //
+        // 2026-08-14: /api/altcha went out carrying a thirty day max-age, so browsers stored one
+        // challenge and went on replaying it. The proof of work is single use by design, so every
+        // submission after the first was refused with "Det gick inte att skicka just nu", and the
+        // only cure a visitor had was clearing their browser cache.
+        //
+        // Correcting the header on the server cannot reach an entry already sitting in somebody's
+        // cache, and those entries live until mid September. A URL the cache has never seen is the
+        // one thing that misses it in every browser; `no-store` says the same to those that listen.
+        var fresh = "/api/altcha?f=" + Date.now() + "-" + Math.random().toString(36).slice(2);
+        var response = await fetchTimed(fresh, { cache: "no-store" });
+        if (!response.ok) throw new Error("challenge-refused");
+        var challenge = await response.json();
+        var number = await solve(challenge);
+        if (number === null) throw new Error("unsolved");
+
+        solved = btoa(JSON.stringify({
+          algorithm: challenge.algorithm,
+          challenge: challenge.challenge,
+          number: number,
+          salt: challenge.salt,
+          signature: challenge.signature,
+        }));
+
+        say("Verifierad som människa", true);
+        if (submit) {
+          submit.textContent = submitText;
+          submit.disabled = false;
+        }
+        return true;
+      } catch (_) {
+        // Keep a retry path on the page. A disabled button plus "reload" turned a temporary
+        // network miss into a dead form, and was especially rough on an uneven mobile signal.
+        say("Kunde inte förbereda. Försök igen.", false);
+        if (submit) {
+          submit.textContent = "Försök igen";
+          submit.disabled = false;
+        }
+        return false;
+      } finally {
+        preparing = null;
+      }
+    })();
+    return preparing;
   }
 
   form.addEventListener("submit", async function (event) {
     event.preventDefault();
-    if (!solved) return;
+    if (sending) return;
+    sending = true;
 
     if (fel) fel.style.display = "none";
     if (submit) {
       submit.disabled = true;
-      submit.textContent = "Skickar …";
+      submit.textContent = solved ? "Skickar …" : "Förbereder …";
     }
+
+    // Pressing Enter can submit while the proof is still being prepared. That used to do
+    // absolutely nothing; now the same attempt simply waits for the work already in flight.
+    if (!solved && !await prepare()) {
+      sending = false;
+      showError("Det gick inte att förbereda formuläret. Försök igen.");
+      return;
+    }
+
+    var remaining = MIN_FORM_AGE_MS - (Date.now() - startedAt);
+    if (remaining > 0) {
+      say("Ett ögonblick …", false);
+      if (submit) submit.textContent = "Ett ögonblick …";
+      await wait(remaining);
+    }
+
+    if (submit) submit.textContent = "Skickar …";
 
     var data = new FormData(form);
     var payload = { altcha: solved, startedAt: startedAt };
     data.forEach(function (value, key) { payload[key] = value; });
+    var surveyAnswers = form.querySelectorAll("[data-survey-answer]");
+    if (surveyAnswers.length) {
+      payload.answers = Array.prototype.map.call(surveyAnswers, function (answer) {
+        return answer.value;
+      });
+    }
 
     try {
-      var response = await fetch(form.dataset.endpoint, {
+      var response = await fetchTimed(form.dataset.endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-      var result = await response.json();
+
+      // Proxies occasionally answer with an HTML error page. Reading it as JSON used to throw
+      // and misreport that as "no connection", hiding a perfectly real server response.
+      var raw = await response.text();
+      var result = {};
+      try {
+        result = raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        if (response.ok) throw new Error("bad-response");
+      }
 
       if (response.ok) {
         window.location.href = form.dataset.next || "/";
         return;
       }
 
-      if (fel) {
-        fel.textContent = result.fel || "Det gick inte just nu.";
-        fel.style.display = "block";
-      }
-    } catch (_) {
-      if (fel) {
-        fel.textContent = "Ingen kontakt med servern.";
-        fel.style.display = "block";
-      }
+      showError(result.fel || "Servern kunde inte skicka just nu. Försök igen.");
+    } catch (cause) {
+      showError(cause && cause.name === "AbortError"
+        ? "Servern svarade inte i tid. Försök igen."
+        : "Ingen kontakt med servern. Försök igen.");
     }
 
     // A used challenge cannot be replayed, so a fresh one is needed before trying again.
-    if (submit) submit.textContent = "Skicka";
+    // Reset the form clock too: without that, a tab left open for a day is rejected forever,
+    // even after the person follows the instruction to try again.
+    sending = false;
+    startedAt = Date.now();
+    if (submit) submit.textContent = submitText;
     solved = null;
     prepare();
   });
@@ -144,7 +228,13 @@
       if (!kontakt) return;
       kontakt.placeholder = placeholders[event.target.value];
       kontakt.value = "";
-      kontakt.type = event.target.value === "telefon" ? "tel" : "text";
+      kontakt.type = event.target.value === "telefon"
+        ? "tel"
+        : (event.target.value === "mail" ? "email" : "text");
+      kontakt.inputMode = event.target.value === "telefon"
+        ? "tel"
+        : (event.target.value === "mail" ? "email" : "text");
+      kontakt.autocomplete = event.target.value === "mail" ? "email" : "off";
     });
   });
 
@@ -164,6 +254,93 @@
   }
 
   prepare();
+})();
+
+/** The greeting-or-survey picker and small question builder on /klar. */
+(function () {
+  "use strict";
+
+  var modes = document.getElementById("scan-mode");
+  var builder = document.getElementById("survey-builder");
+  var questions = document.getElementById("questions");
+  var add = document.getElementById("add-question");
+  var flowPreview = document.getElementById("forhandsflode");
+  if (!modes || !builder || !questions || !add) return;
+
+  var min = Number(builder.getAttribute("data-min")) || 2;
+  var max = Number(builder.getAttribute("data-max")) || 5;
+
+  function selectedMode() {
+    var selected = modes.querySelector('[aria-pressed="true"]');
+    return selected ? selected.getAttribute("data-mode") : "greeting";
+  }
+
+  function rows() {
+    return questions.querySelectorAll("[data-question]");
+  }
+
+  function renumber() {
+    var all = rows();
+    Array.prototype.forEach.call(all, function (row, index) {
+      var label = row.querySelector("label");
+      var input = row.querySelector("input");
+      var remove = row.querySelector("[data-remove-question]");
+      var number = index + 1;
+      if (label) {
+        label.textContent = "Fråga " + number;
+        label.setAttribute("for", "fraga-" + number);
+      }
+      if (input) input.id = "fraga-" + number;
+      if (remove) {
+        remove.setAttribute("aria-label", "Ta bort fråga " + number);
+        remove.disabled = all.length <= min;
+      }
+    });
+    add.disabled = all.length >= max;
+    builder.hidden = selectedMode() !== "survey";
+    if (flowPreview) {
+      flowPreview.textContent = selectedMode() === "survey"
+        ? "Sedan svarar personen på " + all.length + " frågor."
+        : "Sedan kan personen skriva ett öppet meddelande.";
+    }
+  }
+
+  Array.prototype.forEach.call(modes.querySelectorAll("[data-mode]"), function (button) {
+    button.addEventListener("click", function () {
+      Array.prototype.forEach.call(modes.querySelectorAll("[data-mode]"), function (other) {
+        other.setAttribute("aria-pressed", String(other === button));
+      });
+      renumber();
+      if (selectedMode() === "survey") {
+        var first = questions.querySelector("input");
+        if (first) first.focus();
+      }
+    });
+  });
+
+  add.addEventListener("click", function () {
+    if (rows().length >= max) return;
+    var row = document.createElement("div");
+    row.className = "question-row";
+    row.setAttribute("data-question", "");
+    row.innerHTML = '<label>Fråga</label><div class="question-control">' +
+      '<input class="input" type="text" maxlength="120" placeholder="Skriv en fråga">' +
+      '<button class="remove-question" type="button" data-remove-question>Ta bort</button></div>';
+    questions.appendChild(row);
+    renumber();
+    var input = row.querySelector("input");
+    if (input) input.focus();
+  });
+
+  questions.addEventListener("click", function (event) {
+    var remove = event.target.closest("[data-remove-question]");
+    if (!remove || rows().length <= min) return;
+    var row = remove.closest("[data-question]");
+    if (row) row.remove();
+    renumber();
+  });
+
+  renumber();
 })();
 
 /** Copy buttons, e.g. the address on /klar. Lives outside the form guard above. */
@@ -193,7 +370,7 @@
  *
  * Two controls, and that is deliberate. There were three shapes and a colour picker; a QR code
  * is a machine-readable thing first and every one of those settings traded scan reliability for
- * decoration. What remains is the text, and whether the code needs a light panel behind it.
+ * decoration. What remains is the text and the garment background the artwork is made for.
  *
  * Every control rewrites the same URL, and the preview and the downloads both point at it, so
  * what is on screen is byte for byte what a print shop receives.
@@ -229,33 +406,31 @@
       '<span class="dl-fmt">' + (format || "svg").toUpperCase() + "</span></a>";
   }
 
-  // The preview is an origin request: an isolate invocation, a storage read and a render. The
-  // rest of `render` is local DOM work and stays immediate, so only this one is held back.
-  //
-  // Typing a 14-character label fired 14 of them in a burst, and the label never changes the
-  // code's matrix, only the text band above it. A trailing wait means one request for a word.
-  var previewTimer = null;
+  // A frame is enough to collapse several input events from one keypress while still making the
+  // picture visibly follow typing. The former 200 ms trailing delay gave no feedback at all and
+  // felt like a preview that had stopped working on a slower connection.
+  var previewFrame = null;
   function drawPreview() {
-    var next = url(180, false);
+    previewFrame = null;
+    var next = url(180, false) + "&forhandsvisning=1";
     // Also guards the double fetch on load: the server renders this same picture into `src`
     // without `platta`, so assigning the computed URL unconditionally pulled it a second time.
     if (preview.getAttribute("src") === next) return;
+    var frame = document.getElementById("forhandsvisning");
+    if (frame) frame.classList.add("is-updating");
     preview.src = next;
   }
 
   function render() {
-    if (previewTimer !== null) clearTimeout(previewTimer);
-    previewTimer = setTimeout(drawPreview, 200);
+    if (previewFrame === null) previewFrame = requestAnimationFrame(drawPreview);
 
-    // A light panel is invisible against the site's own paper background, so the frame goes
-    // dark to stand in for the garment. Without this the panel looks like it does nothing.
     var frame = document.getElementById("forhandsvisning");
     if (frame) frame.classList.toggle("on-dark", state.platta === "ja");
 
     var hint = document.getElementById("underlagshint");
     if (hint) {
       hint.textContent = state.platta === "ja"
-        ? "Svart kod på en vit platta, så den syns mot mörkt tyg. Vit kod direkt på tyget missas av äldre telefoner och många skannerappar, och tappar kontrasten dubbelt så fort i tvätten."
+        ? "Vit kod och vit text på svart bakgrund. Den svarta ytan i filen smälter in i ett svart plagg."
         : "Svart kod direkt på tyget. Bakgrunden är genomskinlig, så tröjan syns igenom.";
     }
 
@@ -274,9 +449,7 @@
             size[1],
             size[2] + ", " + garment,
             url(size[0], true, format),
-            // The garment goes in the filename. A dark-garment file is white panel, white text
-            // and a dark code, so opened on a white screen it looks like the text is missing.
-            // It is not; but whoever opens it at the print shop should not have to work that out.
+            // The garment goes in the filename, so a print shop cannot mistake the polarity.
             "ojhej-" + slug + "-" + size[0] + "mm-" +
               (state.platta === "ja" ? "svart" : "vit") + "." + format,
             format,
@@ -285,6 +458,15 @@
       }).join("");
     }
   }
+
+  preview.addEventListener("load", function () {
+    var frame = document.getElementById("forhandsvisning");
+    if (frame) frame.classList.remove("is-updating");
+  });
+  preview.addEventListener("error", function () {
+    var frame = document.getElementById("forhandsvisning");
+    if (frame) frame.classList.remove("is-updating");
+  });
 
   Array.prototype.forEach.call(designer.querySelectorAll("[data-platta]"), function (button) {
     button.addEventListener("click", function () {
@@ -442,6 +624,26 @@
         payload.syfte = chosen ? chosen.getAttribute("data-syfte") : "hej";
         payload.etikett = label ? label.value : "";
         if (payload.syfte === "eget") payload.rad = own ? own.value : "";
+
+        var mode = document.querySelector('#scan-mode [aria-pressed="true"]');
+        payload.mode = mode ? mode.getAttribute("data-mode") : "greeting";
+        if (payload.mode === "survey") {
+          var questionInputs = document.querySelectorAll("#questions input");
+          payload.questions = Array.prototype.map.call(questionInputs, function (input) {
+            return input.value.trim();
+          });
+          var empty = Array.prototype.find.call(questionInputs, function (input) {
+            return !input.value.trim();
+          });
+          if (empty) {
+            if (fel) {
+              fel.textContent = "Skriv klart alla frågor.";
+              fel.style.display = "block";
+            }
+            empty.focus();
+            return;
+          }
+        }
       }
 
       button.disabled = true;

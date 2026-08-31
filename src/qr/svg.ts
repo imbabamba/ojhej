@@ -35,7 +35,7 @@ const n = (value: number) => value.toFixed(3);
 function draw(shape: Shape): string {
   switch (shape.kind) {
     case "rect": {
-      // Only the panel carries its own fill, and only ever to paint light behind the code.
+      // The dark-garment background carries its own fill; modules inherit the layout ink.
       const fill = shape.fill ? ` fill="${escapeXml(shape.fill)}"` : "";
       return `<rect x="${n(shape.x)}" y="${n(shape.y)}" width="${n(shape.w)}" ` +
         `height="${n(shape.h)}" rx="${n(shape.radius)}"${fill}/>`;
@@ -45,7 +45,7 @@ function draw(shape: Shape): string {
         `height="${n(shape.h)}" rx="${n(shape.radius)}" fill="none" stroke="currentColor" ` +
         `stroke-width="${n(shape.stroke)}"/>`;
     case "text": {
-      // A panelled label is painted light, because it sits on the garment and not on the panel.
+      // A dark-garment label is explicitly white.
       const fill = shape.fill ? ` fill="${escapeXml(shape.fill)}"` : "";
       return `<text x="${n(shape.cx)}" y="${n(shape.baseline)}" ` +
         `text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-weight="700" ` +

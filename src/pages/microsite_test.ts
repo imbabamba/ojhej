@@ -100,3 +100,25 @@ Deno.test("the scan page still names nobody, whatever the purpose says", async (
   assert(!html.includes("HITTAT?"), "the printed label is the owner's business, not a visitor's");
   assert(!html.includes("emailEnc"), "and nothing of the record leaks into the page");
 });
+
+Deno.test("a survey code asks the owner's questions instead of asking for an open message", async () => {
+  const html = await renderActive(
+    code({ mode: "survey", questions: ["Vad gör dig glad?", "Din perfekta söndag?"] }),
+  ).text();
+
+  assertStringIncludes(html, "Svara på frågorna");
+  assertStringIncludes(html, "Vad gör dig glad?");
+  assertStringIncludes(html, "Din perfekta söndag?");
+  assertStringIncludes(html, "data-survey-answer");
+  assert(!html.includes('id="meddelande"'));
+  assert(!html.includes('id="var"'));
+});
+
+Deno.test("owner-written questions are text, never markup", async () => {
+  const html = await renderActive(
+    code({ mode: "survey", questions: ["Vanlig fråga?", `<img src=x onerror="alert(1)">?`] }),
+  ).text();
+
+  assertEquals(html.match(/<img/g), null);
+  assertStringIncludes(html, "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;?");
+});

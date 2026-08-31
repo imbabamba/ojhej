@@ -18,6 +18,7 @@ import { isValidSlug } from "../store/crypto.ts";
 import { bumpMessageCountOn, getCode, readOwnerEmail } from "../store/shirts.ts";
 import { sendMail } from "../mail/smtp2go.ts";
 import { type ContactChannel, renderMessageMail } from "../mail/templates.ts";
+import { MAX_ANSWER, surveyOf } from "../survey.ts";
 import { error, info } from "../log.ts";
 import { type AppContext, json, methodNotAllowed, refuse } from "./context.ts";
 
@@ -66,13 +67,11 @@ export async function handleMessage(ctx: AppContext, request: Request): Promise<
   if (!isValidSlug(slug)) return refuse();
 
   const namn = text(body.namn, LIMITS.namn);
-  const varSags = text(body.var, LIMITS.var);
-  const meddelande = text(body.meddelande, LIMITS.meddelande);
   const kontakt = text(body.kontakt, LIMITS.kontakt);
   const kanal = body.kanal;
   const validChannel = kanal === "mail" || kanal === "instagram" || kanal === "telefon";
 
-  if (!namn || !varSags || !meddelande || !kontakt || !validChannel) {
+  if (!namn || !kontakt || !validChannel) {
     return json({ fel: "Fyll i alla fält." }, 400);
   }
 
@@ -82,6 +81,27 @@ export async function handleMessage(ctx: AppContext, request: Request): Promise<
   if (!record || record.status !== "active") {
     info("message refused", { reason: record ? record.status : "no-code" });
     return json({ fel: "Den här koden tar inte emot meddelanden just nu." }, 409);
+  }
+
+  const survey = surveyOf(record);
+  const varSags = survey.mode === "greeting" ? text(body.var, LIMITS.var) : null;
+  const meddelande = survey.mode === "greeting" ? text(body.meddelande, LIMITS.meddelande) : null;
+  let answers: { question: string; answer: string }[] | null = null;
+
+  if (survey.mode === "survey") {
+    if (!Array.isArray(body.answers) || body.answers.length !== survey.questions.length) {
+      return json({ fel: "Svara på alla frågor." }, 400);
+    }
+    const cleaned = body.answers.map((answer) => text(answer, MAX_ANSWER));
+    if (cleaned.some((answer) => answer === null)) {
+      return json({ fel: "Svara på alla frågor." }, 400);
+    }
+    answers = survey.questions.map((question, index) => ({
+      question,
+      answer: cleaned[index]!,
+    }));
+  } else if (!varSags || !meddelande) {
+    return json({ fel: "Fyll i alla fält." }, 400);
   }
 
   const today = Math.floor(now / 86_400_000);
@@ -101,17 +121,18 @@ export async function handleMessage(ctx: AppContext, request: Request): Promise<
   try {
     // Decrypted at the last possible moment and never held anywhere else.
     const to = await readOwnerEmail(ctx.emailKey, record);
-    mail = renderMessageMail({
+    const shared = {
       namn,
-      var: varSags,
-      meddelande,
       kanal: kanal as ContactChannel,
       kontakt,
       antalIdag: counted.today,
       maxPerDag: MAX_MESSAGES_PER_DAY,
       slugKort: `ojhej.se/s/${slug.slice(0, 4)}…${slug.slice(-4)}`,
       hanteraUrl: `${ctx.config.baseUrl}/hantera`,
-    });
+    };
+    mail = answers
+      ? renderMessageMail({ ...shared, answers })
+      : renderMessageMail({ ...shared, var: varSags!, meddelande: meddelande! });
 
     await sendMail(ctx.config.smtp2go, {
       to,
