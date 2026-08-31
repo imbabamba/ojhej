@@ -179,7 +179,7 @@ not where the argument lives.
 
 ## What it runs on
 
-ojhej.se runs on three bunny.net products: **Edge Scripting** for the service itself
+ojhej.se runs on three [bunny.net](https://bunny.net/) products: **Edge Scripting** for the service itself
 (`edge/main.ts`), a **CDN pull zone** in front of it, and an **Edge Storage** zone in the EU
 holding both the encrypted records and the static assets. Mail is relayed through
 [SMTP2GO](https://www.smtp2go.com). All of them are paid accounts, and the service they run is free
