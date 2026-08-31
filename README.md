@@ -177,6 +177,17 @@ Those citations will not resolve here, and that is a papercut rather than a gap:
 always in the comment itself, and the citation is a footnote saying where the decision was taken,
 not where the argument lives.
 
+## What it runs on
+
+ojhej.se runs on three bunny.net products: **Edge Scripting** for the service itself
+(`edge/main.ts`), a **CDN pull zone** in front of it, and an **Edge Storage** zone in the EU
+holding both the encrypted records and the static assets. Mail is relayed through
+[SMTP2GO](https://www.smtp2go.com). All of them are paid accounts, and the service they run is free
+for the people who use it.
+
+This repository is the code, and only the code. Running your own means your own bunny.net and
+SMTP2GO accounts, and your own bill.
+
 ## Licence
 
 [GNU Affero General Public License v3.0](LICENSE).
